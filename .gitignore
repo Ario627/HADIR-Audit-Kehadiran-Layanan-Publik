@@ -1,0 +1,56 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+build/
+.output/
+*.tsbuildinfo
+
+# caches
+.turbo/
+.vite/
+.cache/
+coverage/
+.nyc_output/
+
+# env — never commit secrets
+.env
+.env.*
+!.env.example
+!.env.test.example
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# editors / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+
+# local data
+*.local
+tmp/
+temp/
+
+# test artifacts
+playwright-report/
+test-results/
+blob-report/
+
+# python estimator
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+uv.lock.bak
