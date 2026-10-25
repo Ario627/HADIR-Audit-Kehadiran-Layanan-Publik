@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const DEV_SESSION_SECRET = 'dev-only-insecure-secret-change-me-0000000000';
+const DEV_REDIS_URL = 'redis://localhost:6379';
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -9,12 +10,26 @@ const EnvSchema = z.object({
   WEB_ORIGIN: z.string().min(1).default('http://localhost:5173'),
   SESSION_SECRET: z.string().min(32).default(DEV_SESSION_SECRET),
   DATABASE_URL: z.string().min(1).default('postgres://hadir:hadir@localhost:5432/hadir'),
-  REDIS_URL: z.string().min(1).default('redis://localhost:6379'),
+  REDIS_URL: z.string().min(1).default(DEV_REDIS_URL),
   QR_KEYRING_JSON: z.string().optional(),
   DEV_TOOLS: z.enum(['true', 'false']).default('false'),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(16).default(0),
   BODY_LIMIT: z.string().min(1).default('256kb'),
-});
+  CSRF_TOKEN_TTL_MS: z.coerce.number().int().min(60_000).max(86_400_000).default(28_800_000),
+  REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(20_000),
+  HEADERS_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
+  KEEP_ALIVE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(5_000),
+  MAX_HEADERS_COUNT: z.coerce.number().int().min(10).max(2_000).default(100),
+  MAX_REQUESTS_PER_SOCKET: z.coerce.number().int().min(1).max(10_000).default(100),
+})
+  .refine((value) => value.HEADERS_TIMEOUT_MS > value.KEEP_ALIVE_TIMEOUT_MS, {
+    message: 'HEADERS_TIMEOUT_MS harus lebih besar dari KEEP_ALIVE_TIMEOUT_MS.',
+    path: ['HEADERS_TIMEOUT_MS'],
+  })
+  .refine((value) => value.REQUEST_TIMEOUT_MS >= value.HEADERS_TIMEOUT_MS, {
+    message: 'REQUEST_TIMEOUT_MS tidak boleh lebih kecil dari HEADERS_TIMEOUT_MS.',
+    path: ['REQUEST_TIMEOUT_MS'],
+  });
 
 function parseOrigin(raw: string): string {
   let url: URL;
@@ -57,12 +72,22 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
   }
 
   const value = parsed.data;
+  const webOrigins = parseOrigins(value.WEB_ORIGIN);
 
   if (value.NODE_ENV === 'production' && value.SESSION_SECRET === DEV_SESSION_SECRET) {
     throw new Error('SESSION_SECRET wajib diisi dengan secret nyata di production.');
   }
   if (value.NODE_ENV === 'production' && value.DEV_TOOLS === 'true') {
     throw new Error('DEV_TOOLS tidak boleh aktif di production.');
+  }
+  if (value.NODE_ENV === 'production' && value.REDIS_URL === DEV_REDIS_URL) {
+    throw new Error('REDIS_URL wajib diisi dengan instance nyata di production.');
+  }
+  if (
+    value.NODE_ENV === 'production' &&
+    webOrigins.some((origin) => origin.startsWith('http://'))
+  ) {
+    throw new Error('WEB_ORIGIN wajib memakai https di production.');
   }
 
   const isProduction = value.NODE_ENV === 'production';
@@ -72,8 +97,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
     isProduction,
     isTest: value.NODE_ENV === 'test',
     devTools: value.DEV_TOOLS === 'true' && !isProduction,
-    webOrigins: parseOrigins(value.WEB_ORIGIN),
+    webOrigins,
     deviceCookieName: isProduction ? '__Host-hadir_device' : 'hadir_device',
+    csrfCookieName: isProduction ? '__Host-hadir_csrf' : 'hadir_csrf',
     cookieSecure: isProduction,
     qrKeyringJson: value.QR_KEYRING_JSON?.trim() || null,
   });

@@ -44,6 +44,20 @@ function readString(record: Record<string, unknown> | null, key: string): string
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+function readMessage(record: Record<string, unknown> | null): string | null {
+  const value = record?.message;
+  if (typeof value === 'string' && value.length > 0) {
+    return value;
+  }
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const parts = value.filter(
+    (item): item is string => typeof item === 'string' && item.length > 0,
+  );
+  return parts.length > 0 ? parts.join('; ') : null;
+}
+
 function readFieldErrors(value: unknown): FieldError[] | null {
   if (!Array.isArray(value)) {
     return null;
@@ -122,13 +136,13 @@ function parseHttpException(exception: HttpException): ParsedException {
   const detail =
     status >= 500 && !SAFE_SERVER_CODES.has(code)
       ? 'Permintaan tidak dapat diproses.'
-      : (readString(body, 'detail') ?? readString(body, 'message') ?? titleForCode(code));
+      : (readString(body, 'detail') ?? readMessage(body) ?? titleForCode(code));
   return {
     status,
     code,
     detail,
     errors: readFieldErrors(body?.errors),
-    headers: null,
+    headers: status === 429 ? { 'Retry-After': '60' } : null,
     loggedError: status >= 500 ? exception : null,
   };
 }

@@ -70,7 +70,9 @@ export function deviceMiddleware(request: Request, response: Response, next: Nex
       sameSite: 'lax',
       path: '/',
       maxAge: DEVICE_COOKIE_MAX_AGE_MS,
+      priority: 'high',
     };
+    response.setHeader('Cache-Control', 'no-store');
     response.cookie(env.deviceCookieName, signDeviceId(raw), options);
   }
 

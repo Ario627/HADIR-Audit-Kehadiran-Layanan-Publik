@@ -1,0 +1,106 @@
+import { SetMetadata } from '@nestjs/common';
+
+export type RateLimitScope = 'ip' | 'device' | 'device+ip' | 'user';
+
+export interface RateLimitPolicy {
+  name: string;
+  limit: number;
+  windowMs: number;
+  scope: RateLimitScope;
+}
+
+export const RATE_LIMIT_KEY = 'hadir:rate-limit';
+export const SKIP_RATE_LIMIT_KEY = 'hadir:rate-limit:skip';
+
+export const RateLimit = (...policies: RateLimitPolicy[]) =>
+  SetMetadata(RATE_LIMIT_KEY, policies);
+
+export const SkipRateLimit = () => SetMetadata(SKIP_RATE_LIMIT_KEY, true);
+
+export const DEFAULT_MUTATION_POLICY: RateLimitPolicy = {
+  name: 'mutation-default',
+  limit: 60,
+  windowMs: 60_000,
+  scope: 'device+ip',
+};
+
+export const RATE_LIMIT_POLICIES = {
+  deviceBootstrap: {
+    name: 'device-bootstrap',
+    limit: 10,
+    windowMs: 3_600_000,
+    scope: 'ip',
+  },
+  qrLanding: {
+    name: 'qr-landing',
+    limit: 60,
+    windowMs: 60_000,
+    scope: 'ip',
+  },
+  episodeStartHourly: {
+    name: 'episode-start-hourly',
+    limit: 6,
+    windowMs: 3_600_000,
+    scope: 'device',
+  },
+  episodeStartDaily: {
+    name: 'episode-start-daily',
+    limit: 30,
+    windowMs: 86_400_000,
+    scope: 'device',
+  },
+  episodeUpdateHourly: {
+    name: 'episode-update-hourly',
+    limit: 20,
+    windowMs: 3_600_000,
+    scope: 'device',
+  },
+  episodeHeartbeat: {
+    name: 'episode-heartbeat',
+    limit: 2,
+    windowMs: 60_000,
+    scope: 'device',
+  },
+  triage: {
+    name: 'triage',
+    limit: 30,
+    windowMs: 3_600_000,
+    scope: 'device',
+  },
+  reportHourly: {
+    name: 'report-hourly',
+    limit: 5,
+    windowMs: 3_600_000,
+    scope: 'device',
+  },
+  reportDaily: {
+    name: 'report-daily',
+    limit: 20,
+    windowMs: 86_400_000,
+    scope: 'device',
+  },
+  upload: {
+    name: 'upload',
+    limit: 20,
+    windowMs: 3_600_000,
+    scope: 'device',
+  },
+  partnerRead: {
+    name: 'partner-read',
+    limit: 300,
+    windowMs: 60_000,
+    scope: 'user',
+  },
+  partnerExport: {
+    name: 'partner-export',
+    limit: 5,
+    windowMs: 3_600_000,
+    scope: 'user',
+  },
+  authOtp: {
+    name: 'auth-otp',
+    limit: 5,
+    windowMs: 900_000,
+    scope: 'ip',
+  },
+} as const satisfies Record<string, RateLimitPolicy>;
