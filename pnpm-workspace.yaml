@@ -1,0 +1,22 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+catalog:
+  typescript: 6.0.2
+  zod: 4.6.7
+  react: 19.3.1
+  react-dom: 19.3.1
+  vite: 8.3.5
+  vitest: 5.0.5
+  tailwindcss: 4.3.3
+  '@tailwindcss/vite': 4.3.3
+  '@tanstack/react-router': 1.170.46
+  '@tanstack/react-query': 5.104.5
+
+# Build scripts are denied by default (supply-chain hygiene).
+# Every entry here is a package whose install script we reviewed and allow.
+allowBuilds:
+  '@parcel/watcher': true
+  unrs-resolver: true
+  esbuild: true
