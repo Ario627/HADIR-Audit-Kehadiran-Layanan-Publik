@@ -3,13 +3,28 @@ import { z } from 'zod';
 const DEV_SESSION_SECRET = 'dev-only-insecure-secret-change-me-0000000000';
 const DEV_REDIS_URL = 'redis://localhost:6379';
 
+const DatabaseUrl = z
+  .string()
+  .min(1)
+  .refine(
+    (value) => {
+      try {
+        const url = new URL(value);
+        return url.protocol === 'postgres:' || url.protocol === 'postgresql:';
+      } catch {
+        return false;
+      }
+    },
+    { message: 'DATABASE_URL harus URL postgres:// atau postgresql://.' },
+  );
+
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   HOST: z.string().min(1).default('0.0.0.0'),
   PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
   WEB_ORIGIN: z.string().min(1).default('http://localhost:5173'),
   SESSION_SECRET: z.string().min(32).default(DEV_SESSION_SECRET),
-  DATABASE_URL: z.string().min(1).default('postgres://hadir:hadir@localhost:5432/hadir'),
+  DATABASE_URL: DatabaseUrl.default('postgres://hadir:hadir@localhost:5432/hadir'),
   REDIS_URL: z.string().min(1).default(DEV_REDIS_URL),
   QR_KEYRING_JSON: z.string().optional(),
   DEV_TOOLS: z.enum(['true', 'false']).default('false'),
@@ -21,6 +36,16 @@ const EnvSchema = z.object({
   KEEP_ALIVE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(5_000),
   MAX_HEADERS_COUNT: z.coerce.number().int().min(10).max(2_000).default(100),
   MAX_REQUESTS_PER_SOCKET: z.coerce.number().int().min(1).max(10_000).default(100),
+  DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
+  DB_IDLE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(300_000).default(30_000),
+  DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
+  DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(500).max(60_000).default(10_000),
+  DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
+  DB_LOCK_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
+  DB_APPLICATION_NAME: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/).default('hadir-api'),
+  DB_SSL_MODE: z.enum(['disable', 'require', 'verify-full']).default('disable'),
+  DB_SSL_CA: z.string().optional(),
+  MIGRATION_DATABASE_URL: DatabaseUrl.optional(),
 })
   .refine((value) => value.HEADERS_TIMEOUT_MS > value.KEEP_ALIVE_TIMEOUT_MS, {
     message: 'HEADERS_TIMEOUT_MS harus lebih besar dari KEEP_ALIVE_TIMEOUT_MS.',
@@ -59,6 +84,15 @@ function parseOrigins(raw: string): readonly string[] {
   return Object.freeze([...new Set(origins)]);
 }
 
+function isLocalHost(databaseUrl: string): boolean {
+  try {
+    const host = new URL(databaseUrl).hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
 function formatEnvIssues(issues: readonly z.ZodIssue[]): string {
   return issues
     .map((issue) => `${issue.path.join('.') || 'env'}: ${issue.message}`)
@@ -89,6 +123,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
   ) {
     throw new Error('WEB_ORIGIN wajib memakai https di production.');
   }
+  if (value.NODE_ENV === 'production' && isLocalHost(value.DATABASE_URL)) {
+    throw new Error('DATABASE_URL wajib menunjuk database non-local di production.');
+  }
+  if (value.NODE_ENV === 'production' && value.DB_SSL_MODE !== 'verify-full') {
+    throw new Error('DB_SSL_MODE wajib verify-full di production.');
+  }
 
   const isProduction = value.NODE_ENV === 'production';
 
@@ -102,6 +142,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
     csrfCookieName: isProduction ? '__Host-hadir_csrf' : 'hadir_csrf',
     cookieSecure: isProduction,
     qrKeyringJson: value.QR_KEYRING_JSON?.trim() || null,
+    dbSslCa: value.DB_SSL_CA?.trim() || null,
+    migrationDatabaseUrl: value.MIGRATION_DATABASE_URL?.trim() || null,
   });
 }
 

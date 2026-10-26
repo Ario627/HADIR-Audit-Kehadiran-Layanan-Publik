@@ -6,9 +6,10 @@ import { RateLimitGuard } from './common/http/rate-limit.guard';
 import { RateLimitModule } from './common/http/rate-limit.module';
 import { CsrfGuard } from './common/security/csrf.guard';
 import { HealthController } from './health/health.controller';
+import { DbModule } from './db/db.module';
 
 @Module({
-  imports: [RateLimitModule],
+  imports: [RateLimitModule, DbModule],
   controllers: [AppController, HealthController],
   providers: [
     AppService,
