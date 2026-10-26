@@ -60,6 +60,8 @@ const WARNINGS = [
   { code: 'timeout_inferred', meaning: 'Episode ditutup otomatis karena melewati batas waktu tunggu.' },
   { code: 'client_time', meaning: 'Durasi direkonstruksi dari jam perangkat setelah sinkronisasi offline.' },
   { code: 'duration_clamped', meaning: 'Klaim durasi perangkat melebihi waktu server dan dipotong.' },
+  { code: 'late_correction', meaning: 'Episode yang ditutup otomatis kemudian dikoreksi pengguna dalam batas waktu.' },
+  { code: 'simulated', meaning: 'Data simulasi; hanya tampil pada mode demo berlabel.' },
 ] as const;
 
 const METHODOLOGY_STEPS = [
@@ -100,7 +102,6 @@ const METHODOLOGY_STEPS = [
       'Arah ditentukan dari posisi seluruh interval terhadap ambang. Level bukti ditentukan dari jumlah, keragaman perangkat, jumlah klaster, dan design effect.',
   },
 ] as const;
-
 const LIMITATIONS = [
   'Angka mencerminkan pengalaman penunggu yang mencatat, bukan seluruh penumpang.',
   'Halte tanpa data ditampilkan tanpa angka, bukan dengan angka nol.',
@@ -121,6 +122,13 @@ export class MetaController {
       methodVersion: estimatorCriteria.methodVersion,
       tauMinutes: env.episodeTauMinutes,
       windows: WINDOWS,
+      episode: {
+        analysisTauMinutes: env.episodeTauMinutes,
+        idleTimeoutMinutes: env.episodeIdleMinutes,
+        absoluteMaxMinutes: env.episodeMaxMinutes,
+        correctionWindowMinutes: env.episodeMaxMinutes,
+        heartbeatIntervalSeconds: 60,
+      },
       ci: {
         level: estimatorCriteria.ciLevel,
         method: 'cluster-bootstrap',

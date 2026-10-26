@@ -11,6 +11,8 @@
     "start:dev": "nest start --watch --env-file .env",
     "start:debug": "nest start --debug --watch --env-file .env",
     "start:prod": "node dist/main",
+    "worker:outbox": "node --env-file-if-exists=.env --import tsx src/workers/outbox-run.ts",
+    "worker:maintenance": "node --env-file-if-exists=.env --import tsx src/workers/maintenance-run.ts",
     "lint": "oxlint --type-aware src/ test/",
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand",

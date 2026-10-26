@@ -164,6 +164,19 @@ export const institutionKind = pgEnum('institution_kind', [
   'operator',
   'other',
 ]);
+
+export const runwayStatus = pgEnum('runway_status', ['funded', 'pending', 'stopped', 'unknown']);
+export const runwayEventKind = pgEnum('runway_event_kind', [
+  'announced',
+  'budget_decided',
+  'funded',
+  'suspended',
+  'resumed',
+  'stopped',
+  'corrected',
+]);
+
+
 export const noticeKind = pgEnum('notice_kind', [
   'detour',
   'repair',

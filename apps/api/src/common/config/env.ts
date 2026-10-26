@@ -32,6 +32,8 @@ const EnvSchema = z.object({
   BODY_LIMIT: z.string().min(1).default('256kb'),
   CSRF_TOKEN_TTL_MS: z.coerce.number().int().min(60_000).max(86_400_000).default(28_800_000),
   EPISODE_TAU_MINUTES: z.coerce.number().int().min(5).max(180).default(45),
+  EPISODE_IDLE_MINUTES: z.coerce.number().int().min(2).max(120).default(10),
+  EPISODE_MAX_MINUTES: z.coerce.number().int().min(15).max(720).default(180),
   REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(20_000),
   HEADERS_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
   KEEP_ALIVE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(5_000),
@@ -56,6 +58,14 @@ const EnvSchema = z.object({
   .refine((value) => value.REQUEST_TIMEOUT_MS >= value.HEADERS_TIMEOUT_MS, {
     message: 'REQUEST_TIMEOUT_MS tidak boleh lebih kecil dari HEADERS_TIMEOUT_MS.',
     path: ['REQUEST_TIMEOUT_MS'],
+  })
+  .refine((value) => value.EPISODE_IDLE_MINUTES < value.EPISODE_TAU_MINUTES, {
+    message: 'EPISODE_IDLE_MINUTES harus lebih kecil dari EPISODE_TAU_MINUTES.',
+    path: ['EPISODE_IDLE_MINUTES'],
+  })
+  .refine((value) => value.EPISODE_TAU_MINUTES < value.EPISODE_MAX_MINUTES, {
+    message: 'EPISODE_TAU_MINUTES harus lebih kecil dari EPISODE_MAX_MINUTES.',
+    path: ['EPISODE_TAU_MINUTES'],
   });
 
 function parseOrigin(raw: string): string {
@@ -147,6 +157,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
     csrfCookieName: isProduction ? '__Host-hadir_csrf' : 'hadir_csrf',
     cookieSecure: isProduction,
     episodeTauMinutes: value.EPISODE_TAU_MINUTES,
+    episodeIdleMinutes: value.EPISODE_IDLE_MINUTES,
+    episodeMaxMinutes: value.EPISODE_MAX_MINUTES,
     qrKeyringJson: value.QR_KEYRING_JSON?.trim() || null,
     dbSslCa: value.DB_SSL_CA?.trim() || null,
     migrationDatabaseUrl: value.MIGRATION_DATABASE_URL?.trim() || null,

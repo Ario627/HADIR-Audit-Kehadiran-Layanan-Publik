@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type {
   EndEpisodeInput,
   Episode,
+  HeartbeatInput,
   StartEpisodeInput,
   StartMode,
 } from '@hadir/contracts';
@@ -17,6 +18,7 @@ import {
 import { QrService } from '../../common/security/qr.service';
 import { DevicesRepository } from '../../db/repositories/devices.repository';
 import { EpisodesRepository } from '../../db/repositories/episodes.repository';
+import type { EndEpisodeValues } from '../../db/repositories/episodes.repository';
 import type { Transaction } from '../../db/client';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -24,7 +26,13 @@ const CLOCK_TOLERANCE_MS = 10 * 60 * 1000;
 const OFFLINE_SYNC_LAG_MS = 2 * 60 * 1000;
 const MIN_CLAIMED_DURATION_MS = 30 * 1000;
 const CITIZEN_START_MODES = new Set<StartMode>(['qr', 'gps_nearby', 'manual']);
-const TAU_MINUTES = env.episodeTauMinutes;
+const REAP_WINDOW = Object.freeze({
+  tauMinutes: env.episodeTauMinutes,
+  idleMinutes: env.episodeIdleMinutes,
+  maxMinutes: env.episodeMaxMinutes,
+});
+const CORRECTION_WINDOW_MS = env.episodeMaxMinutes * 60 * 1000;
+const CORRECTABLE_OUTCOMES = new Set(['boarded', 'abandoned', 'passed_full']);
 
 interface ClockInfo {
   clientStartedAt: Date;
@@ -105,7 +113,7 @@ function clockInfo(now: Date, clientStartedAt: Date): ClockInfo {
 }
 
 function assertClientTimeNotAhead(
-  field: 'clientStartedAt' | 'clientEndedAt',
+  field: 'clientStartedAt' | 'clientEndedAt' | 'clientAt',
   clientAt: Date,
   now: Date,
 ): void {
@@ -155,6 +163,16 @@ export function resolveEndTiming(input: EndTimingInput): EndTiming {
   };
 }
 
+export function correctionWithinWindow(input: {
+  startedAt: Date;
+  endedAt: Date;
+  windowMs?: number;
+}): boolean {
+  const windowMs = input.windowMs ?? CORRECTION_WINDOW_MS;
+  const elapsedMs = input.endedAt.getTime() - input.startedAt.getTime();
+  return elapsedMs >= 0 && elapsedMs <= windowMs;
+}
+
 @Injectable()
 export class EpisodesService {
   constructor(
@@ -165,11 +183,25 @@ export class EpisodesService {
   ) {}
 
   private async closeStale(deviceHash: string): Promise<void> {
-    await this.episodes.closeStaleForDevice(deviceHash, TAU_MINUTES);
+    await this.episodes.runInTransaction((tx) => this.closeStaleTx(tx, deviceHash));
   }
 
   private async closeStaleTx(tx: Transaction, deviceHash: string): Promise<void> {
-    await this.episodes.closeStaleForDeviceTx(tx, deviceHash, TAU_MINUTES);
+    const reaped = await this.episodes.closeStaleForDeviceTx(tx, deviceHash, REAP_WINDOW);
+    for (const episode of reaped) {
+      await this.episodes.appendEvent(
+        tx,
+        episode.id,
+        episode.startedAt,
+        'ended',
+        {
+          outcome: 'timeout',
+          inferred: true,
+          endedAt: episode.endedAt.toISOString(),
+          durationS: episode.durationS,
+        },
+      );
+    }
   }
 
   private async assertDeviceRecord(tx: Transaction, deviceHash: string): Promise<void> {
@@ -350,12 +382,16 @@ export class EpisodesService {
         if (locked === null) {
           throw new AppError('NOT_FOUND', { detail: 'Episode tidak ditemukan.' });
         }
-        if (locked.outcome !== null) {
+        const isCorrection = locked.outcome === 'timeout';
+        if (locked.outcome !== null && !isCorrection) {
+          throw new AppError('INVALID_TRANSITION', {
+            detail: 'Episode ini sudah selesai.',
+          });
+        }
+        if (isCorrection && !CORRECTABLE_OUTCOMES.has(input.outcome)) {
           throw new AppError('INVALID_TRANSITION', {
             detail:
-              locked.outcome === 'timeout'
-                ? 'Episode sudah ditutup otomatis setelah melewati batas waktu tunggu.'
-                : 'Episode ini sudah selesai.',
+              'Episode yang ditutup otomatis hanya bisa dikoreksi menjadi naik, menyerah, atau bus penuh.',
           });
         }
 
@@ -381,19 +417,37 @@ export class EpisodesService {
           clientEndedAt,
           now,
         });
-        const episode = await this.episodes.applyEnd(
+        if (isCorrection && !correctionWithinWindow({ startedAt: locked.startedAt, endedAt: timing.endedAt })) {
+          throw new AppError('INVALID_TRANSITION', {
+            detail:
+              'Koreksi melewati batas waktu yang diizinkan. Catat episode baru bila ingin mengukur ulang.',
+          });
+        }
+
+        const values: EndEpisodeValues = {
+          outcome: input.outcome,
+          endedAt: timing.endedAt,
+          clientEndedAt,
+          note: input.note ?? null,
+          timeSource: timing.timeSource,
+          qualityFlags: timing.qualityFlags,
+        };
+        const stop = { code: locked.stopCode, name: locked.stopName };
+        const episode = isCorrection
+          ? await this.episodes.applyCorrection(tx, id, device.hash, values, stop)
+          : await this.episodes.applyEnd(tx, id, device.hash, values, stop);
+
+        await this.episodes.appendEvent(
           tx,
           id,
-          device.hash,
+          locked.startedAt,
+          isCorrection ? 'corrected' : 'ended',
           {
-            outcome: input.outcome,
-            endedAt: timing.endedAt,
-            clientEndedAt,
-            note: input.note ?? null,
+            outcome: episode.outcome,
+            durationS: episode.durationS,
             timeSource: timing.timeSource,
-            qualityFlags: timing.qualityFlags,
+            previousOutcome: isCorrection ? 'timeout' : null,
           },
-          { code: locked.stopCode, name: locked.stopName },
         );
         await this.episodes.enqueue(tx, 'episode.ended', {
           episodeId: episode.id,
@@ -401,6 +455,7 @@ export class EpisodesService {
           endedAt: episode.endedAt,
           durationS: episode.durationS,
           timeSource: timing.timeSource,
+          corrected: isCorrection,
         });
         return { status: 200, body: episode };
       },
@@ -424,5 +479,28 @@ export class EpisodesService {
     assertDevice(device);
     await this.closeStale(device.hash);
     return this.episodes.findActiveForDevice(device.hash);
+  }
+
+  async heartbeat(
+    id: string,
+    input: HeartbeatInput,
+    device: DeviceIdentity,
+  ): Promise<void> {
+    assertDevice(device);
+
+    await this.episodes.runInTransaction(async (tx) => {
+      await this.assertDeviceRecord(tx, device.hash);
+      const target = await this.episodes.findHeartbeatTarget(tx, id, device.hash);
+      if (target === null) {
+        throw new AppError('NOT_FOUND', { detail: 'Episode tidak ditemukan.' });
+      }
+      assertClientTimeNotAhead('clientAt', new Date(input.clientAt), new Date());
+      const accepted = await this.episodes.recordHeartbeat(tx, id, device.hash, new Date());
+      if (!accepted) {
+        throw new AppError('INVALID_TRANSITION', {
+          detail: 'Episode ini sudah selesai.',
+        });
+      }
+    });
   }
 }

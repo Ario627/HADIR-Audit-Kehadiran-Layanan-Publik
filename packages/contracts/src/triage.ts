@@ -12,6 +12,7 @@ import {
 export const TriageInput = z
   .object({
     stopCode: StopCode,
+    routeId: Uuid.nullable().optional(),
     category: ReportCategory,
     text: z.string().trim().min(3).max(2000).optional(),
     clientEventId: UuidV7,

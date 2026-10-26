@@ -111,9 +111,19 @@ export class TriageRepository {
     return toNumber(row.total) ?? 0;
   }
 
+  async routeServesStop(routeId: string, stopId: string): Promise<boolean> {
+    const result = await this.db.execute(sql`
+      SELECT 1 AS ok FROM route_stops
+      WHERE route_id = ${routeId} AND stop_id = ${stopId}
+      LIMIT 1
+    `);
+    return result.rows.length > 0;
+  }
+
   async findPlannedEvidence(
     stopCode: string,
     category: ReportCategory,
+    routeId: string | null,
   ): Promise<EvidenceRow[]> {
     const result = await this.db.execute(sql`
       SELECT id, claim, tier::text AS tier, source_url, retrieved_at, match_score
@@ -123,6 +133,10 @@ export class TriageRepository {
         AND (
           payload @> jsonb_build_object('category', ${category}::text)
           OR payload @> jsonb_build_object('stopCode', ${stopCode}::text)
+          OR (
+            ${routeId}::text IS NOT NULL
+            AND payload @> jsonb_build_object('routeId', ${routeId}::text)
+          )
         )
       ORDER BY tier ASC, coalesce(match_score, 0) DESC
       LIMIT ${EVIDENCE_LIMIT}

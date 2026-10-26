@@ -65,6 +65,7 @@ export const waitEpisodes = pgTable(
     outcome: episodeOutcome('outcome'),
     startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }).notNull(),
     endedAt: timestamp('ended_at', { withTimezone: true, mode: 'date' }),
+    lastHeartbeatAt: timestamp('last_heartbeat_at', { withTimezone: true, mode: 'date' }),
     durationS: integer('duration_s').generatedAlwaysAs(
       sql`CASE WHEN ended_at IS NULL THEN NULL ELSE GREATEST(0, EXTRACT(EPOCH FROM (ended_at - started_at))::integer) END`,
     ),

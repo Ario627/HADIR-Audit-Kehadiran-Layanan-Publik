@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type {
   DistanceBucket,
@@ -9,9 +10,13 @@ import type {
 } from '@hadir/contracts';
 import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { Database, Transaction } from '../client';
+import { withTransaction } from '../client';
 import { DATABASE } from '../db.module';
-import { outbox, routeStops, stops, waitEpisodes } from '../schema';
+import { outbox, routeStops, stops, waitEpisodeEvents, waitEpisodes } from '../schema';
 import { AppError } from '../../common/errors/app-error';
+import { canonicalJson } from '../../common/utils/canonical-json';
+
+const GENESIS_HASH = Buffer.alloc(32);
 
 export interface StopRecord {
   id: string;
@@ -54,8 +59,10 @@ export interface EndEpisodeValues {
 export interface LockedEpisode {
   id: string;
   startedAt: Date;
+  endedAt: Date | null;
   clientStartedAt: Date | null;
   outcome: EpisodeOutcome | null;
+  qualityFlags: string[];
   stopCode: string;
   stopName: string;
 }
@@ -111,11 +118,32 @@ const episodeSelection = {
 const lockSelection = {
   id: waitEpisodes.id,
   startedAt: waitEpisodes.startedAt,
+  endedAt: waitEpisodes.endedAt,
   clientStartedAt: waitEpisodes.clientStartedAt,
   outcome: waitEpisodes.outcome,
+  qualityFlags: waitEpisodes.qualityFlags,
   stopCode: stops.code,
   stopName: stops.name,
 };
+
+function mapReaped(rows: unknown[]): ReapedEpisode[] {
+  const output: ReapedEpisode[] = [];
+  for (const raw of rows as Record<string, unknown>[]) {
+    const id = typeof raw.id === 'string' ? raw.id : null;
+    const startedAt = raw.started_at;
+    const endedAt = raw.ended_at;
+    if (!(startedAt instanceof Date) || !(endedAt instanceof Date) || id === null) {
+      continue;
+    }
+    output.push({
+      id,
+      startedAt,
+      endedAt,
+      durationS: typeof raw.duration_s === 'number' ? raw.duration_s : null,
+    });
+  }
+  return output;
+}
 
 function toEpisode(row: EpisodeRow): Episode {
   return {
@@ -140,17 +168,64 @@ function appendFlags(expression: SQL, flags: readonly string[]): SQL {
   return flags.reduce<SQL>((current, flag) => sql`${current} || ${flag}::text`, expression);
 }
 
-function staleEpisodeSql(deviceHash: string, tauMinutes: number): SQL {
+export interface ReapWindow {
+  tauMinutes: number;
+  idleMinutes: number;
+  maxMinutes: number;
+}
+
+export interface ReapedEpisode {
+  id: string;
+  startedAt: Date;
+  endedAt: Date;
+  durationS: number | null;
+}
+
+interface ReapScope {
+  deviceHash: string | null;
+  limit: number | null;
+}
+
+function deviceScope(deviceHash: string | null): SQL {
+  return deviceHash === null ? sql`TRUE` : sql`${waitEpisodes.deviceHash} = ${deviceHash}`;
+}
+
+function stalePredicate(window: ReapWindow): SQL {
+  return sql`(
+    COALESCE(${waitEpisodes.lastHeartbeatAt}, ${waitEpisodes.startedAt})
+      < now() - make_interval(mins => ${window.idleMinutes})
+    OR ${waitEpisodes.startedAt} < now() - make_interval(mins => ${window.maxMinutes})
+  )`;
+}
+
+function staleEpisodeSql(scope: ReapScope, window: ReapWindow): SQL {
   return sql`
-    WITH stale AS (
+    WITH picked AS (
+      SELECT ${waitEpisodes.id} AS id
+      FROM ${waitEpisodes}
+      WHERE ${waitEpisodes.outcome} IS NULL
+        AND ${deviceScope(scope.deviceHash)}
+        AND ${stalePredicate(window)}
+      ORDER BY ${waitEpisodes.startedAt}
+      LIMIT ${scope.limit}
+      FOR UPDATE SKIP LOCKED
+    ),
+    stale AS (
       UPDATE ${waitEpisodes}
       SET outcome = 'timeout',
-          ended_at = ${waitEpisodes.startedAt} + make_interval(mins => ${tauMinutes}),
+          ended_at = GREATEST(
+            ${waitEpisodes.startedAt},
+            LEAST(
+              now(),
+              COALESCE(
+                ${waitEpisodes.lastHeartbeatAt},
+                ${waitEpisodes.startedAt} + make_interval(mins => ${window.tauMinutes})
+              )
+            )
+          ),
           quality_flags = array_append(${waitEpisodes.qualityFlags}, 'timeout_inferred')
-      WHERE ${waitEpisodes.deviceHash} = ${deviceHash}
-        AND ${waitEpisodes.outcome} IS NULL
-        AND ${waitEpisodes.startedAt} < now() - make_interval(mins => ${tauMinutes})
-      RETURNING id, ended_at, duration_s
+      WHERE ${waitEpisodes.id} IN (SELECT id FROM picked)
+      RETURNING id, started_at, ended_at, duration_s
     ),
     queued AS (
       INSERT INTO ${outbox} (topic, payload)
@@ -165,7 +240,7 @@ function staleEpisodeSql(deviceHash: string, tauMinutes: number): SQL {
       FROM stale
       RETURNING 1 AS queued
     )
-    SELECT count(*)::int AS closed FROM stale
+    SELECT id, started_at, ended_at, duration_s FROM stale
   `;
 }
 
@@ -214,20 +289,102 @@ export class EpisodesRepository {
     );
   }
 
-  async closeStaleForDevice(deviceHash: string, tauMinutes: number): Promise<number> {
-    const result = await this.db.execute(staleEpisodeSql(deviceHash, tauMinutes));
-    const row = result.rows[0] as { closed?: number } | undefined;
-    return row?.closed ?? 0;
+  async runInTransaction<T>(work: (tx: Transaction) => Promise<T>): Promise<T> {
+    return withTransaction(work);
   }
 
   async closeStaleForDeviceTx(
     tx: Transaction,
     deviceHash: string,
-    tauMinutes: number,
-  ): Promise<number> {
-    const result = await tx.execute(staleEpisodeSql(deviceHash, tauMinutes));
-    const row = result.rows[0] as { closed?: number } | undefined;
-    return row?.closed ?? 0;
+    window: ReapWindow,
+  ): Promise<ReapedEpisode[]> {
+    const result = await tx.execute(staleEpisodeSql({ deviceHash, limit: null }, window));
+    return mapReaped(result.rows);
+  }
+
+  async reapStaleGlobal(window: ReapWindow, limit: number): Promise<ReapedEpisode[]> {
+    if (!Number.isInteger(limit) || limit < 1) {
+      throw new Error(`reap limit tidak valid: ${limit}`);
+    }
+    const result = await this.db.execute(staleEpisodeSql({ deviceHash: null, limit }, window));
+    return mapReaped(result.rows);
+  }
+
+  async appendEvent(
+    tx: Transaction,
+    episodeId: string,
+    episodeStartedAt: Date,
+    kind: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    await tx.execute(sql`SELECT id FROM wait_episodes WHERE id = ${episodeId} FOR UPDATE`);
+    const last = await tx.execute(sql`
+      SELECT seq, chain_hash FROM wait_episode_events
+      WHERE episode_id = ${episodeId}
+      ORDER BY seq DESC
+      LIMIT 1
+    `);
+    const previous = (last.rows[0] ?? {}) as Record<string, unknown>;
+    const previousSeq =
+      typeof previous.seq === 'number' ? previous.seq : null;
+    const previousHash =
+      previous.chain_hash instanceof Buffer ? previous.chain_hash : GENESIS_HASH;
+    const payloadHash = createHash('sha256')
+      .update(canonicalJson(payload))
+      .digest();
+    const chainHash = createHash('sha256')
+      .update(previousHash)
+      .update(payloadHash)
+      .digest();
+    await tx.insert(waitEpisodeEvents).values({
+      episodeId,
+      episodeStartedAt,
+      seq: previousSeq === null ? 1 : previousSeq + 1,
+      kind,
+      actorType: 'system',
+      actorId: null,
+      payload,
+      prevHash: previousHash,
+      payloadHash,
+      chainHash,
+    });
+  }
+
+  async recordHeartbeat(
+    tx: Transaction,
+    id: string,
+    deviceHash: string,
+    at: Date,
+  ): Promise<boolean> {
+    const updated = await tx
+      .update(waitEpisodes)
+      .set({ lastHeartbeatAt: at })
+      .where(
+        and(
+          eq(waitEpisodes.id, id),
+          eq(waitEpisodes.deviceHash, deviceHash),
+          isNull(waitEpisodes.outcome),
+        ),
+      )
+      .returning({ id: waitEpisodes.id });
+    return updated.length === 1;
+  }
+
+  async findHeartbeatTarget(
+    tx: Transaction,
+    id: string,
+    deviceHash: string,
+  ): Promise<{ id: string; startedAt: Date; lastHeartbeatAt: Date | null } | null> {
+    const rows = await tx
+      .select({
+        id: waitEpisodes.id,
+        startedAt: waitEpisodes.startedAt,
+        lastHeartbeatAt: waitEpisodes.lastHeartbeatAt,
+      })
+      .from(waitEpisodes)
+      .where(and(eq(waitEpisodes.id, id), eq(waitEpisodes.deviceHash, deviceHash)))
+      .limit(1);
+    return rows[0] ?? null;
   }
 
   async findStopByCode(tx: Transaction, code: string): Promise<StopRecord | null> {
@@ -360,6 +517,47 @@ export class EpisodesRepository {
     if (row === undefined) {
       throw new AppError('INVALID_TRANSITION', {
         detail: 'Episode ini sudah selesai.',
+      });
+    }
+    return toEpisode({
+      ...row,
+      stopCode: stop.code,
+      stopName: stop.name,
+    });
+  }
+
+  async applyCorrection(
+    tx: Transaction,
+    id: string,
+    deviceHash: string,
+    input: EndEpisodeValues,
+    stop: EpisodeStop,
+  ): Promise<Episode> {
+    const rows = await tx
+      .update(waitEpisodes)
+      .set({
+        outcome: input.outcome,
+        endedAt: input.endedAt,
+        clientEndedAt: input.clientEndedAt,
+        note: input.note,
+        timeSource: input.timeSource,
+        qualityFlags: appendFlags(sql`${waitEpisodes.qualityFlags}`, [
+          ...input.qualityFlags,
+          'late_correction',
+        ]),
+      })
+      .where(
+        and(
+          eq(waitEpisodes.id, id),
+          eq(waitEpisodes.deviceHash, deviceHash),
+          eq(waitEpisodes.outcome, 'timeout'),
+        ),
+      )
+      .returning(episodeColumns);
+    const row = rows[0];
+    if (row === undefined) {
+      throw new AppError('INVALID_TRANSITION', {
+        detail: 'Episode ini tidak dapat dikoreksi.',
       });
     }
     return toEpisode({

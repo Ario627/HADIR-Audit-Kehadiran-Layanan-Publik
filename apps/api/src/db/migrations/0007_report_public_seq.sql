@@ -1,0 +1,11 @@
+CREATE SEQUENCE reports_public_seq
+  AS bigint
+  START WITH 1
+  INCREMENT BY 1
+  MINVALUE 1
+  MAXVALUE 999999
+  CACHE 20
+  NO CYCLE;
+
+REVOKE ALL ON SEQUENCE reports_public_seq FROM PUBLIC;
+GRANT USAGE, SELECT ON SEQUENCE reports_public_seq TO hadir_app;

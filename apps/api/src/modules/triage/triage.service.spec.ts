@@ -7,10 +7,12 @@ import type {
 import type { DevicesRepository } from '../../db/repositories/devices.repository';
 import type { EvidenceRow, TriageRepository } from '../../db/repositories/triage.repository';
 import type { EstimatesService } from '../estimates/estimates.service';
+import type { RunwayService } from '../runway/runway.service';
 import type { StopsService } from '../stops/stops.service';
 import { TriageService } from './triage.service';
 
 const STOP_ID = '0192f0c4-0000-7000-8000-0000000000aa';
+const ROUTE_ID = '0192f0c4-0000-7000-8000-0000000000bb';
 const PILOT = '0192f0c4-0000-7000-8000-0000000000a1';
 const OTHER = '0192f0c4-0000-7000-8000-0000000000a2';
 const SESSION_ID = '0192f0c4-0000-7000-8000-0000000000ff';
@@ -34,6 +36,10 @@ interface FactOverrides {
   pilotFail?: boolean;
   estimate?: { evidence: 'none' | 'indication' | 'strong'; n: number } | null;
   estimateFail?: boolean;
+  routeServed?: boolean;
+  estimateRoutes?: (string | null)[];
+  runwayStatus?: 'funded' | 'pending' | 'stopped' | 'unknown' | null;
+  runwayFail?: boolean;
 }
 
 function stop(): StopDetail {
@@ -44,7 +50,15 @@ function stop(): StopDetail {
     location: { lat: -7.4112, lon: 109.2418 },
     status: 'active',
     isDemo: false,
-    routes: [],
+    routes: [
+      {
+        id: ROUTE_ID,
+        code: 'K3A',
+        name: 'Terminal - Kampus',
+        promisedHeadwayPeakMin: 15,
+        headwaySourceUrl: null,
+      },
+    ],
     description: null,
     geofenceRadiusM: 150,
     createdAt: '2026-10-01T00:00:00.000Z',
@@ -73,6 +87,7 @@ function repositoryDouble(overrides: FactOverrides): TriageRepository {
       overrides.duplicatesFail === true ? failing() : (overrides.duplicates ?? 0),
     findPlannedEvidence: async () =>
       overrides.plannedFail === true ? failing() : (overrides.planned ?? []),
+    routeServesStop: async () => overrides.routeServed ?? true,
     findAuthority: async () =>
       overrides.authorityFail === true ? failing() : (overrides.authority ?? null),
     findPilotInstitution: async () =>
@@ -95,7 +110,8 @@ function repositoryDouble(overrides: FactOverrides): TriageRepository {
 
 function estimatesDouble(overrides: FactOverrides): EstimatesService {
   return {
-    estimate: async () => {
+    estimate: async (_stopId: string, query: { routeId?: string }) => {
+      overrides.estimateRoutes?.push(query.routeId ?? null);
       if (overrides.estimateFail === true) {
         failing();
       }
@@ -143,6 +159,17 @@ function estimatesDouble(overrides: FactOverrides): EstimatesService {
   } as unknown as EstimatesService;
 }
 
+function runwayDouble(overrides: FactOverrides): RunwayService {
+  return {
+    statusFor: async () => {
+      if (overrides.runwayFail === true) {
+        failing();
+      }
+      return overrides.runwayStatus === undefined ? null : overrides.runwayStatus;
+    },
+  } as unknown as RunwayService;
+}
+
 function buildService(overrides: FactOverrides): {
   service: TriageService;
   scopes: string[];
@@ -186,6 +213,7 @@ function buildService(overrides: FactOverrides): {
       devices,
       stops,
       estimatesDouble(overrides),
+      runwayDouble(overrides),
       idempotency,
     ),
     scopes,
@@ -345,8 +373,61 @@ describe('TriageService.triage', () => {
   });
 });
 
-describe('TriageService.rules', () => {
-  it('publishes every verdict with copy and thresholds', async () => {
+describe('TriageService corridor handling', () => {
+  it('passes the corridor to the estimate so the promise threshold applies', async () => {
+    const routes: (string | null)[] = [];
+    const { service } = buildService({ estimateRoutes: routes });
+
+    await service.triage(
+      { ...input(), routeId: ROUTE_ID },
+      KEY,
+      DEVICE,
+      CONTEXT,
+    );
+
+    expect(routes).toEqual([ROUTE_ID]);
+  });
+
+  it('omits the corridor when the client does not supply one', async () => {
+    const routes: (string | null)[] = [];
+    const { service } = buildService({ estimateRoutes: routes });
+
+    await service.triage(input(), KEY, DEVICE, CONTEXT);
+
+    expect(routes).toEqual([null]);
+  });
+
+  it('rejects a corridor that does not serve the stop', async () => {
+    const routes: (string | null)[] = [];
+    const { service } = buildService({ estimateRoutes: routes });
+
+    await expect(
+      service.triage(
+        { ...input(), routeId: '0192f0c4-0000-7000-8000-0000000000ff' },
+        KEY,
+        DEVICE,
+        CONTEXT,
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect(routes).toEqual([]);
+  });
+
+  it('treats a null corridor the same as an absent one', async () => {
+    const routes: (string | null)[] = [];
+    const { service } = buildService({ estimateRoutes: routes });
+
+    await service.triage(
+      { ...input(), routeId: null },
+      KEY,
+      DEVICE,
+      CONTEXT,
+    );
+
+    expect(routes).toEqual([null]);
+  });
+});
+
+describe('TriageService.rules', () => {  it('publishes every verdict with copy and thresholds', async () => {
     const { service } = buildService({});
 
     const rules = service.rules();

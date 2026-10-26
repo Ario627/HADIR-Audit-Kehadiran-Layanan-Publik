@@ -11,7 +11,7 @@ import {
   Req,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { EndEpisodeInput, StartEpisodeInput, Uuid } from '@hadir/contracts';
+import { EndEpisodeInput, HeartbeatInput, StartEpisodeInput, Uuid } from '@hadir/contracts';
 import { ok } from '../../common/http/envelope';
 import { idempotencyKeyOf } from '../../common/http/idempotency-key';
 import { contextOf, deviceOf, requestIdOf } from '../../common/http/request-context';
@@ -62,6 +62,21 @@ export class EpisodesController {
       deviceHash: device.hash,
     });
     return ok(episode, requestIdOf(request));
+  }
+
+  @Post(':id/heartbeat')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header('Cache-Control', NO_STORE)
+  @RateLimit(RATE_LIMIT_POLICIES.episodeHeartbeat)
+  async heartbeat(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() request: Request,
+  ): Promise<void> {
+    const episodeId = parseOrThrow(Uuid, id);
+    const input = parseOrThrow(HeartbeatInput, body);
+    const device = deviceOf(request);
+    await this.episodes.heartbeat(episodeId, input, device);
   }
 
   @Get('active')

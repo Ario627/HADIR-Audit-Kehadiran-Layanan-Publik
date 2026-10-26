@@ -1,8 +1,17 @@
 import { createHash } from 'node:crypto';
-import { and, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { env } from '../common/config/env';
 import { closeDatabase, db } from './client';
-import { cities, devices, routeStops, routes, stops, waitEpisodes } from './schema';
+import {
+  authorityMap,
+  cities,
+  devices,
+  institutions,
+  routeStops,
+  routes,
+  stops,
+  waitEpisodes,
+} from './schema';
 
 interface StopSpec {
   code: string;
@@ -42,6 +51,19 @@ const ROUTE_SPECS: readonly RouteSpec[] = [
   { code: 'K3A', name: 'Terminal - Kampus', headwayMin: 15 },
   { code: 'K4', name: 'Alun-Alun - Stasiun', headwayMin: 20 },
 ];
+
+interface InstitutionSpec {
+  name: string;
+  kind: 'dinhub' | 'pupr';
+  site: string;
+}
+
+const INSTITUTION_SPECS: readonly InstitutionSpec[] = [
+  { name: 'Dinhub Banyumas', kind: 'dinhub', site: 'https://dinhub.banyumaskab.go.id' },
+  { name: 'PUPR Banyumas', kind: 'pupr', site: 'https://pupr.banyumaskab.go.id' },
+];
+
+const FOREIGN_STOP_CODES: readonly string[] = ['BMS-E11'];
 
 const EPISODE_COUNT = 200;
 const DEVICE_COUNT = 3;
@@ -220,6 +242,56 @@ async function main(): Promise<void> {
       seq: index,
     }));
     await db.insert(routeStops).values(values).onConflictDoNothing();
+  }
+
+  const institutionRows: { id: string; spec: InstitutionSpec }[] = [];
+  for (const spec of INSTITUTION_SPECS) {
+    const existing = await db
+      .select({ id: institutions.id })
+      .from(institutions)
+      .where(and(eq(institutions.cityId, city.id), eq(institutions.name, spec.name)))
+      .limit(1);
+    const created =
+      existing[0] ??
+      (
+        await db
+          .insert(institutions)
+          .values({
+            cityId: city.id,
+            name: spec.name,
+            kind: spec.kind,
+            officialSiteUrl: spec.site,
+          })
+          .returning({ id: institutions.id })
+      )[0];
+    if (created === undefined) {
+      throw new Error(`Institusi ${spec.name} gagal dibuat.`);
+    }
+    institutionRows.push({ id: created.id, spec });
+  }
+
+  const pilot = institutionRows.find((row) => row.spec.kind === 'dinhub');
+  const foreign = institutionRows.find((row) => row.spec.kind === 'pupr');
+  if (pilot === undefined || foreign === undefined) {
+    throw new Error('Institusi seed tidak lengkap.');
+  }
+  for (const stop of stopRows) {
+    const owner = FOREIGN_STOP_CODES.includes(stop.spec.code) ? foreign : pilot;
+    await db
+      .insert(authorityMap)
+      .values({
+        cityId: city.id,
+        assetKind: 'stop',
+        assetRef: stop.spec.code,
+        institutionId: owner.id,
+        sourceUrl: 'https://contoh.go.id/kewenangan-aset',
+        verified: owner === pilot,
+        note: owner === pilot ? null : 'Contoh pemetaan lintas instansi untuk mode demo',
+      })
+      .onConflictDoUpdate({
+        target: [authorityMap.cityId, authorityMap.assetKind, authorityMap.assetRef],
+        set: { institutionId: owner.id, verified: owner === pilot },
+      });
   }
 
   const deviceHashes = Array.from({ length: DEVICE_COUNT }, (_, index) =>

@@ -15,6 +15,8 @@ import { QrLandingModule } from './modules/qr-landing/qr-landing.module';
 import { EstimatesModule } from './modules/estimates/estimates.module';
 import { MetaController } from './modules/meta/meta.controller';
 import { TriageModule } from './modules/triage/triage.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { RunwayModule } from './modules/runway/runway.module';
 
 @Module({
   imports: [
@@ -27,6 +29,8 @@ import { TriageModule } from './modules/triage/triage.module';
     QrLandingModule,
     EstimatesModule,
     TriageModule,
+    ReportsModule,
+    RunwayModule,
   ],
   controllers: [AppController, HealthController, MetaController],
   providers: [

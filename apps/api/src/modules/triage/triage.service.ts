@@ -33,7 +33,7 @@ import {
 } from '../../db/repositories/triage.repository';
 import type { Transaction } from '../../db/client';
 import { EstimatesService } from '../estimates/estimates.service';
-import { StopsService } from '../stops/stops.service';
+import { RunwayService } from '../runway/runway.service';import { StopsService } from '../stops/stops.service';
 import { copyFor } from './triage.messages';
 
 const RULES_VERSION = 'triage-v1';
@@ -72,7 +72,6 @@ interface Attempt<T> {
   available: boolean;
   value: T | null;
 }
-
 export function assertKnownDevice(device: DeviceIdentity): void {
   if (device.isNew) {
     throw new AppError('UNAUTHENTICATED', {
@@ -117,6 +116,47 @@ export function estimateSignal(estimate: Estimate | null): TriageFacts['estimate
   };
 }
 
+export function serviceRunningFrom(
+  available: boolean,
+  status: string | null,
+): boolean | null {
+  if (!available || status === null) {
+    return null;
+  }
+  if (status === 'stopped') {
+    return false;
+  }
+  if (status === 'funded') {
+    return true;
+  }
+  return null;
+}
+
+export type RadarAttempt =
+  | { kind: 'not_applicable' }
+  | { kind: 'unavailable' }
+  | { kind: 'ok'; status: string | null };
+
+export function radarState(attempt: RadarAttempt): 'ok' | 'unavailable' | 'not_configured' {
+  if (attempt.kind === 'not_applicable') {
+    return 'not_configured';
+  }
+  if (attempt.kind === 'unavailable') {
+    return 'unavailable';
+  }
+  return 'ok';
+}
+
+export function radarAvailable(attempt: RadarAttempt): boolean {
+  return attempt.kind === 'ok';
+}
+
+export function radarServiceRunning(attempt: RadarAttempt): boolean | null {
+  return attempt.kind === 'ok'
+    ? serviceRunningFrom(true, attempt.status)
+    : null;
+}
+
 @Injectable()
 export class TriageService {
   private readonly logger = new Logger(TriageService.name);
@@ -126,6 +166,7 @@ export class TriageService {
     private readonly devices: DevicesRepository,
     private readonly stops: StopsService,
     private readonly estimates: EstimatesService,
+    private readonly runway: RunwayService,
     private readonly idempotency: IdempotencyService,
   ) {}
 
@@ -154,19 +195,33 @@ export class TriageService {
     stopId: string,
     stopCode: string,
     category: ReportCategory,
+    routeId: string | null,
   ): Promise<TriageFacts> {
-    const [duplicates, planned, authority, pilot, estimate] = await Promise.all([
+    const [duplicates, planned, authority, pilot, estimate, radar] = await Promise.all([
       this.collect('duplicates', () =>
         this.repository.countDuplicates(stopId, category, DUPLICATE_WINDOW_DAYS),
       ),
       this.collect('planned', () =>
-        this.repository.findPlannedEvidence(stopCode, category),
+        this.repository.findPlannedEvidence(stopCode, category, routeId),
       ),
       this.collect('authority', () => this.repository.findAuthority(stopId)),
       this.collect('pilot', () => this.repository.findPilotInstitution(stopId)),
       this.collect('estimate', () =>
-        this.estimates.estimate(stopId, { window: ESTIMATE_WINDOW }),
+        this.estimates.estimate(
+          stopId,
+          routeId === null
+            ? { window: ESTIMATE_WINDOW }
+            : { window: ESTIMATE_WINDOW, routeId },
+        ),
       ),
+      routeId === null
+        ? Promise.resolve<RadarAttempt>({ kind: 'not_applicable' })
+        : this.collect('runway', () => this.runway.statusFor(routeId)).then(
+            (attempt): RadarAttempt =>
+              attempt.available
+                ? { kind: 'ok', status: attempt.value }
+                : { kind: 'unavailable' },
+          ),
     ]);
 
     return {
@@ -177,8 +232,8 @@ export class TriageService {
       authority: authority.value,
       authorityAvailable: authority.available,
       pilotInstitutionId: pilot.value,
-      serviceRunning: null,
-      radarAvailable: false,
+      serviceRunning: radarServiceRunning(radar),
+      radarAvailable: radarAvailable(radar),
       estimate: estimateSignal(estimate.value),
       categoryIsService: SERVICE_CATEGORIES.has(category),
       connectors: {
@@ -186,7 +241,7 @@ export class TriageService {
         planned: connectorState(planned),
         authority: connectorState(authority),
         estimate: connectorState(estimate),
-        radar: 'not_configured',
+        radar: radarState(radar),
       },
     };
   }
@@ -203,9 +258,26 @@ export class TriageService {
     if (stop.status !== 'active') {
       throw new AppError('STOP_INACTIVE', { detail: 'Halte sedang tidak aktif.' });
     }
+    const routeId = input.routeId ?? null;
+    if (routeId !== null) {
+      const route = stop.routes.find((item) => item.id === routeId);
+      if (route === undefined) {
+        throw new AppError('VALIDATION_FAILED', {
+          detail: 'Koridor tidak melayani halte ini.',
+          errors: [
+            {
+              field: 'routeId',
+              code: 'route_mismatch',
+              message: 'routeId tidak terhubung ke halte ini.',
+            },
+          ],
+        });
+      }
+    }
 
     const requestHash = idempotencyHash({
       stopCode: input.stopCode,
+      routeId,
       category: input.category,
       clientEventId: input.clientEventId,
       text: input.text ?? null,
@@ -221,7 +293,7 @@ export class TriageService {
       async (tx) => {
         await this.assertDeviceRecord(tx, device.hash);
         const startedAt = Date.now();
-        const facts = await this.collectFacts(stop.id, stop.code, input.category);
+        const facts = await this.collectFacts(stop.id, stop.code, input.category, routeId);
         const decision = decideTriage(facts);
         const latencyMs = Date.now() - startedAt;
         const evidence = (facts.planned as EvidenceRow[]).slice(0, EVIDENCE_LIMIT);
@@ -230,7 +302,7 @@ export class TriageService {
           deviceDayHash: device.dayHash,
           clientEventId: input.clientEventId,
           stopId: stop.id,
-          routeId: null,
+          routeId,
           category: input.category,
           verdict: decision.verdict,
           evidenceIds: [...decision.citedEvidenceIds],

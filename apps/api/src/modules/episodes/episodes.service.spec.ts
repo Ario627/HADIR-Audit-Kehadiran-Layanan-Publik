@@ -62,9 +62,9 @@ function buildStartInput(overrides: Partial<StartEpisodeInput> = {}): StartEpiso
 function episodesDouble(state: RepositoryState) {
   return {
     lockDevice: async (): Promise<void> => undefined,
-    closeStaleForDeviceTx: async (_tx: unknown, deviceHash: string): Promise<number> => {
-      state.reaped.push(deviceHash);
-      return 0;
+    closeStaleForDeviceTx: async (): Promise<never[]> => {
+      state.reaped.push(DEVICE.hash);
+      return [];
     },
     findByClientEventId: async (): Promise<Episode | null> => null,
     findStopByCode: async () => ({

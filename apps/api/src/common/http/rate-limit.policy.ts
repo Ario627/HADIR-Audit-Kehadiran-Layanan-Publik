@@ -103,6 +103,30 @@ export const RATE_LIMIT_POLICIES = {
     windowMs: 86_400_000,
     scope: 'device',
   },
+  reportCreateIp: {
+    name: 'report-create-ip',
+    limit: 60,
+    windowMs: 3_600_000,
+    scope: 'ip',
+  },
+  reportAction: {
+    name: 'report-action',
+    limit: 30,
+    windowMs: 3_600_000,
+    scope: 'device',
+  },
+  reportsRead: {
+    name: 'reports-read',
+    limit: 120,
+    windowMs: 60_000,
+    scope: 'ip',
+  },
+  deviceRead: {
+    name: 'device-read',
+    limit: 120,
+    windowMs: 60_000,
+    scope: 'device+ip',
+  },
   upload: {
     name: 'upload',
     limit: 20,
