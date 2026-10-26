@@ -12,6 +12,7 @@ import type {
   ReportStatus,
   VerifyClosureInput,
 } from '@hadir/contracts';
+import { AuditService } from '../../common/audit/audit.service';
 import { AppError } from '../../common/errors/app-error';
 import { env } from '../../common/config/env';
 import { parseBbox } from '../../common/geo/bbox';
@@ -257,6 +258,7 @@ export class ReportsService {
     private readonly repository: ReportsRepository,
     private readonly devices: DevicesRepository,
     private readonly idempotency: IdempotencyService,
+    private readonly audit: AuditService,
   ) {}
 
   private async assertDeviceRecord(tx: Transaction, deviceHash: string): Promise<void> {
@@ -371,7 +373,16 @@ export class ReportsService {
       context,
     );
 
-    return result.body as CreateReportResult;
+    const created = result.body as CreateReportResult;
+    await this.audit.record({
+      action: 'report.create',
+      objectType: 'report',
+      objectId: created.report.publicId,
+      actor: { kind: 'citizen', deviceHash: device.hash },
+      requestId: context.requestId,
+      payload: { category: input.category },
+    });
+    return created;
   }
 
   async listPublic(query: ListReportsQuery): Promise<ReportListResult> {
@@ -475,6 +486,14 @@ export class ReportsService {
           throw new AppError('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
         }
         if (locked.deviceHash === device.hash) {
+          await this.audit.denial({
+            attempted: 'report.corroborate',
+            reason: 'self_corroborate',
+            objectType: 'report',
+            objectId: publicId,
+            actor: { kind: 'citizen', deviceHash: device.hash },
+            requestId: context.requestId,
+          });
           throw new AppError('INVALID_TRANSITION', {
             detail: 'Laporan sendiri tidak perlu didukung.',
           });
@@ -507,7 +526,19 @@ export class ReportsService {
       context,
     );
 
-    return result.body as { corroborationCount: number; alreadyCounted: boolean };
+    const corroborated = result.body as {
+      corroborationCount: number;
+      alreadyCounted: boolean;
+    };
+    await this.audit.record({
+      action: 'report.corroborate',
+      objectType: 'report',
+      objectId: publicId,
+      actor: { kind: 'citizen', deviceHash: device.hash },
+      requestId: context.requestId,
+      payload: { alreadyCounted: corroborated.alreadyCounted },
+    });
+    return corroborated;
   }
 
   async verifyClosure(
@@ -549,6 +580,14 @@ export class ReportsService {
           device.hash,
         );
         if (!participation.reporter && !participation.corroborator) {
+          await this.audit.denial({
+            attempted: 'report.closure_verify',
+            reason: 'not_a_participant',
+            objectType: 'report',
+            objectId: publicId,
+            actor: { kind: 'citizen', deviceHash: device.hash },
+            requestId: context.requestId,
+          });
           throw new AppError('FORBIDDEN', {
             detail: 'Hanya pelapor atau pendukung yang dapat memverifikasi penutupan.',
           });
@@ -574,7 +613,16 @@ export class ReportsService {
       context,
     );
 
-    return result.body as { status: ReportStatus; recorded: boolean };
+    const closure = result.body as { status: ReportStatus; recorded: boolean };
+    await this.audit.record({
+      action: 'report.closure_verify',
+      objectType: 'report',
+      objectId: publicId,
+      actor: { kind: 'citizen', deviceHash: device.hash },
+      requestId: context.requestId,
+      payload: { answer: input.answer, status: closure.status },
+    });
+    return closure;
   }
 
   async partnerAction(
@@ -586,6 +634,13 @@ export class ReportsService {
     mode: { devTools: boolean } = { devTools: env.devTools },
   ): Promise<PartnerActionResult> {
     if (!partnerActionAllowed(mode)) {
+      await this.audit.denial({
+        attempted: 'report.partner_action',
+        reason: 'partner_mode_disabled',
+        objectType: 'report',
+        objectId: publicId,
+        requestId: context.requestId,
+      });
       throw new AppError('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
     }
     assertDevice(device);
@@ -650,6 +705,18 @@ export class ReportsService {
       context,
     );
 
-    return result.body as PartnerActionResult;
+    const settled = result.body as PartnerActionResult;
+    await this.audit.record({
+      action: 'report.partner_action',
+      objectType: 'report',
+      objectId: publicId,
+      requestId: context.requestId,
+      payload: {
+        partnerAction: input.action,
+        from: settled.previousStatus,
+        to: settled.status,
+      },
+    });
+    return settled;
   }
 }

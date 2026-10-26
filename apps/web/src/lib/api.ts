@@ -36,6 +36,7 @@ export interface ApiRequestOptions {
   signal?: AbortSignal;
   idempotencyKey?: string;
   timeoutMs?: number;
+  keepalive?: boolean;
 }
 
 interface ApiErrorOptions {
@@ -44,6 +45,7 @@ interface ApiErrorOptions {
   requestId?: string | null;
   fieldErrors?: readonly ApiFieldError[];
   problem?: ProblemDetails | null;
+  retryAfterSeconds?: number | null;
   cause?: unknown;
 }
 
@@ -59,6 +61,7 @@ export class ApiError extends Error {
   readonly requestId: string | null;
   readonly fieldErrors: readonly ApiFieldError[];
   readonly problem: ProblemDetails | null;
+  readonly retryAfterSeconds: number | null;
 
   constructor(message: string, options: ApiErrorOptions) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
@@ -68,6 +71,7 @@ export class ApiError extends Error {
     this.requestId = options.requestId ?? null;
     this.fieldErrors = Object.freeze([...(options.fieldErrors ?? [])]);
     this.problem = options.problem ?? null;
+    this.retryAfterSeconds = options.retryAfterSeconds ?? null;
   }
 }
 
@@ -181,6 +185,21 @@ export function ensureDevice(): Promise<void> {
   return deviceBootstrap;
 }
 
+function clearCsrfCookie(): void {
+  if (typeof document === 'undefined') {
+    return;
+  }
+  for (const name of ['__Host-hadir_csrf', 'hadir_csrf']) {
+    const secure = name.startsWith('__Host-') ? '; Secure' : '';
+    document.cookie = `${name}=; Max-Age=0; Path=/${secure}`;
+  }
+}
+
+export function resetDevice(): void {
+  deviceBootstrap = null;
+  clearCsrfCookie();
+}
+
 async function toApiError(response: Response): Promise<ApiError> {
   let problem: ProblemDetails | null = null;
   const contentType = response.headers.get('content-type') ?? '';
@@ -201,12 +220,19 @@ async function toApiError(response: Response): Promise<ApiError> {
     requestId,
     fieldErrors: problem?.errors ?? [],
     problem,
+    retryAfterSeconds: readRetryAfter(response),
   });
+}
+
+const RECOVERABLE_SESSION_CODES = new Set(['CSRF_INVALID', 'CSRF_MISSING', 'UNAUTHENTICATED']);
+
+function isRecoverableSessionError(error: unknown): boolean {
+  return error instanceof ApiError && RECOVERABLE_SESSION_CODES.has(error.code);
 }
 
 function parseEnvelope<T>(value: unknown, fallbackRequestId: string): ApiEnvelope<T> | null {
   const record = asRecord(value);
-  if (record === null || !('data' in record)) {
+  if (record === null || !Object.hasOwn(record, 'data')) {
     return null;
   }
   const metaRecord = asRecord(record.meta);
@@ -223,7 +249,16 @@ function parseEnvelope<T>(value: unknown, fallbackRequestId: string): ApiEnvelop
   };
 }
 
-export async function apiRequest<T>(
+function readRetryAfter(response: Response): number | null {
+  const raw = response.headers.get('retry-after');
+  if (raw === null) {
+    return null;
+  }
+  const seconds = Number(raw.trim());
+  return Number.isFinite(seconds) && seconds >= 0 && seconds <= 86_400 ? Math.ceil(seconds) : null;
+}
+
+async function performRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<ApiEnvelope<T>> {
@@ -259,6 +294,7 @@ export async function apiRequest<T>(
       headers,
       credentials: 'include',
       signal,
+      ...(options.keepalive === true ? { keepalive: true } : {}),
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     });
   } catch (error) {
@@ -317,8 +353,55 @@ export async function apiRequest<T>(
 type ReadOptions = Omit<ApiRequestOptions, 'method' | 'body' | 'idempotencyKey'>;
 type WriteOptions = Omit<ApiRequestOptions, 'method' | 'body'>;
 
+export async function apiRequest<T>(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<ApiEnvelope<T>> {
+  try {
+    return await performRequest<T>(path, options);
+  } catch (error) {
+    if (!isRecoverableSessionError(error)) {
+      throw error;
+    }
+    resetDevice();
+    return performRequest<T>(path, options);
+  }
+}
+
+export interface PayloadSchema<T> {
+  safeParse(value: unknown): { success: true; data: T } | { success: false };
+}
+
+function assertContract<T>(envelope: ApiEnvelope<unknown>, schema: PayloadSchema<T>): ApiEnvelope<T> {
+  const parsed = schema.safeParse(envelope.data);
+  if (!parsed.success) {
+    throw new ApiError('Respons server tidak sesuai kontrak.', {
+      status: 0,
+      code: 'CONTRACT_MISMATCH',
+      requestId: envelope.meta.requestId,
+    });
+  }
+  return { data: parsed.data, meta: envelope.meta };
+}
+
 export function apiGet<T>(path: string, options: ReadOptions = {}): Promise<ApiEnvelope<T>> {
   return apiRequest<T>(path, { ...options, method: 'GET' });
+}
+
+export async function apiSendChecked<T>(
+  path: string,
+  schema: PayloadSchema<T>,
+  options: ApiRequestOptions,
+): Promise<ApiEnvelope<T>> {
+  return assertContract(await apiRequest<unknown>(path, options), schema);
+}
+
+export async function apiGetChecked<T>(
+  path: string,
+  schema: PayloadSchema<T>,
+  options: ReadOptions = {},
+): Promise<ApiEnvelope<T>> {
+  return apiSendChecked(path, schema, { ...options, method: 'GET' });
 }
 
 export function apiPost<T>(

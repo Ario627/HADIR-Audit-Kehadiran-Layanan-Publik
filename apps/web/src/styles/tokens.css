@@ -20,8 +20,45 @@
   --font-sans: "Archivo Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
 
+  --text-label: 0.75rem;
+  --text-label--line-height: 1rem;
+  --text-meta: 0.8125rem;
+  --text-meta--line-height: 1.125rem;
+  --text-body: 1rem;
+  --text-body--line-height: 1.5rem;
+  --text-lede: 1.0625rem;
+  --text-lede--line-height: 1.625rem;
+  --text-title: 1.375rem;
+  --text-title--line-height: 1.75rem;
+  --text-page: clamp(1.75rem, 4.2vw, 2.25rem);
+  --text-page--line-height: 1.1;
+  --text-metric: 1.75rem;
+  --text-metric--line-height: 1.1;
+  --text-clock: clamp(3.25rem, 14vw, 5.5rem);
+  --text-clock--line-height: 1;
+
   --radius-ticket: 2px;
   --radius-sheet: 6px;
+  --radius-pill: 999px;
+}
+
+:root {
+  --duration-1: 120ms;
+  --duration-2: 180ms;
+  --duration-3: 280ms;
+  --duration-4: 420ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --shell-max: 1120px;
+  --measure: 68ch;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --overlay: rgba(21, 22, 15, 0.06);
+  --viz-1: #0072b2;
+  --viz-2: #e69f00;
+  --viz-3: #009e73;
+  --viz-4: #d55e00;
+  --viz-5: #cc79a7;
+  --viz-6: #56b4e9;
 }
 
 @layer base {
@@ -41,11 +78,9 @@
     margin: 0;
     min-height: 100dvh;
     font-family: var(--font-sans);
-    font-size: 16px;
-    line-height: 1.5;
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
     background-color: var(--color-paper);
-    background-image: radial-gradient(rgba(21, 22, 15, 0.05) 0.6px, transparent 0.6px);
-    background-size: 4px 4px;
   }
 
   h1,
@@ -69,8 +104,9 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-signal);
+    outline: 2px solid var(--color-ink);
     outline-offset: 2px;
+    box-shadow: 0 0 0 5px var(--color-signal);
   }
 
   ::selection {
@@ -85,9 +121,23 @@
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 150ms !important;
+    transition-duration: var(--duration-1) !important;
     transition-property: opacity, color, background-color, border-color !important;
     transform: none !important;
     scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --color-muted: #4a4739;
+    --color-line: #7d7869;
+    --color-level-none: #4a4739;
+    --color-level-indication: #633f07;
+  }
+
+  :focus-visible {
+    outline-width: 3px;
+    box-shadow: none;
   }
 }

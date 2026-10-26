@@ -10,7 +10,7 @@
     "build": "vite build",
     "preview": "vite preview --port 4173",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint --type-aware src",
+    "lint": "oxlint --type-aware -c ../../packages/config/oxlint.react.json src",
     "test": "vitest run"
   },
   "dependencies": {

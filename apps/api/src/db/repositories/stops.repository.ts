@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ListStopsQuery, RouteSummary, StopDetail, StopSummary } from '@hadir/contracts';
-import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
 import type { Database } from '../client';
 import { DATABASE } from '../db.module';
 import { cities, routeStops, routes, stops } from '../schema';
@@ -217,8 +217,12 @@ export class StopsRepository {
   async list(input: ListStopsQuery): Promise<StopListResult> {
     const conditions: SQL[] = [];
     if (input.q !== undefined) {
+      const pattern = `%${escapeLike(input.q)}%`;
       conditions.push(
-        sql`${stops.name} ILIKE ${`%${escapeLike(input.q)}%`} ESCAPE '\\'`,
+        or(
+          sql`${stops.name} ILIKE ${pattern} ESCAPE '\\'`,
+          sql`${stops.code} ILIKE ${pattern} ESCAPE '\\'`,
+        ) as SQL,
       );
     }
     if (input.city !== undefined) {

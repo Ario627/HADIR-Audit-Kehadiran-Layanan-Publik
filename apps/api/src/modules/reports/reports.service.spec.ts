@@ -1,3 +1,4 @@
+import { auditStub } from '../../test-support/audit.stub';
 import type { ReportDetail } from '@hadir/contracts';
 import type { DeviceIdentity } from '../../common/http/request-context';
 import type {
@@ -134,7 +135,7 @@ function buildService(overrides: Overrides = {}): {
     findByHash: async () => ({ id: 'd1', trustScore: 0.5, revokedAt: null }),
   } as unknown as DevicesRepository;
   return {
-    service: new ReportsService(repositoryDouble(log, overrides), devices, idempotency),
+    service: new ReportsService(repositoryDouble(log, overrides), devices, idempotency, auditStub()),
     log,
   };
 }

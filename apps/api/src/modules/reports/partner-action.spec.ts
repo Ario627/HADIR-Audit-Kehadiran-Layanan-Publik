@@ -1,3 +1,4 @@
+import { auditStub } from '../../test-support/audit.stub';
 import type { DeviceIdentity } from '../../common/http/request-context';
 import type {
   IdempotencyContext,
@@ -90,7 +91,7 @@ function buildService(status: StoredReportStatus): { service: ReportsService; lo
     findByHash: async () => ({ id: 'd1', trustScore: 0.5, revokedAt: null }),
   } as unknown as DevicesRepository;
   return {
-    service: new ReportsService(repositoryDouble(status, log), devices, idempotency),
+    service: new ReportsService(repositoryDouble(status, log), devices, idempotency, auditStub()),
     log,
   };
 }
