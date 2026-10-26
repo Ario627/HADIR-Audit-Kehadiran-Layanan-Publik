@@ -7,7 +7,7 @@ import type {
   Presence,
   StartMode,
 } from '@hadir/contracts';
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { Database, Transaction } from '../client';
 import { DATABASE } from '../db.module';
 import { outbox, routeStops, stops, waitEpisodes } from '../schema';
@@ -44,8 +44,25 @@ export interface StartEpisodeValues {
 
 export interface EndEpisodeValues {
   outcome: 'boarded' | 'abandoned' | 'passed_full' | 'cancelled';
+  endedAt: Date;
   clientEndedAt: Date;
   note: string | null;
+  timeSource: 'server' | 'client';
+  qualityFlags: readonly string[];
+}
+
+export interface LockedEpisode {
+  id: string;
+  startedAt: Date;
+  clientStartedAt: Date | null;
+  outcome: EpisodeOutcome | null;
+  stopCode: string;
+  stopName: string;
+}
+
+export interface EpisodeStop {
+  code: string;
+  name: string;
 }
 
 interface EpisodeRow {
@@ -91,6 +108,15 @@ const episodeSelection = {
   stopName: stops.name,
 };
 
+const lockSelection = {
+  id: waitEpisodes.id,
+  startedAt: waitEpisodes.startedAt,
+  clientStartedAt: waitEpisodes.clientStartedAt,
+  outcome: waitEpisodes.outcome,
+  stopCode: stops.code,
+  stopName: stops.name,
+};
+
 function toEpisode(row: EpisodeRow): Episode {
   return {
     id: row.id,
@@ -108,6 +134,39 @@ function toEpisode(row: EpisodeRow): Episode {
     outcome: row.outcome,
     qualityFlags: row.qualityFlags,
   };
+}
+
+function appendFlags(expression: SQL, flags: readonly string[]): SQL {
+  return flags.reduce<SQL>((current, flag) => sql`${current} || ${flag}::text`, expression);
+}
+
+function staleEpisodeSql(deviceHash: string, tauMinutes: number): SQL {
+  return sql`
+    WITH stale AS (
+      UPDATE ${waitEpisodes}
+      SET outcome = 'timeout',
+          ended_at = ${waitEpisodes.startedAt} + make_interval(mins => ${tauMinutes}),
+          quality_flags = array_append(${waitEpisodes.qualityFlags}, 'timeout_inferred')
+      WHERE ${waitEpisodes.deviceHash} = ${deviceHash}
+        AND ${waitEpisodes.outcome} IS NULL
+        AND ${waitEpisodes.startedAt} < now() - make_interval(mins => ${tauMinutes})
+      RETURNING id, ended_at, duration_s
+    ),
+    queued AS (
+      INSERT INTO ${outbox} (topic, payload)
+      SELECT 'episode.ended',
+             jsonb_build_object(
+               'episodeId', stale.id,
+               'outcome', 'timeout',
+               'endedAt', stale.ended_at,
+               'durationS', stale.duration_s,
+               'inferred', true
+             )
+      FROM stale
+      RETURNING 1 AS queued
+    )
+    SELECT count(*)::int AS closed FROM stale
+  `;
 }
 
 @Injectable()
@@ -153,6 +212,22 @@ export class EpisodesRepository {
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${`episode:${deviceHash}`}, 0))`,
     );
+  }
+
+  async closeStaleForDevice(deviceHash: string, tauMinutes: number): Promise<number> {
+    const result = await this.db.execute(staleEpisodeSql(deviceHash, tauMinutes));
+    const row = result.rows[0] as { closed?: number } | undefined;
+    return row?.closed ?? 0;
+  }
+
+  async closeStaleForDeviceTx(
+    tx: Transaction,
+    deviceHash: string,
+    tauMinutes: number,
+  ): Promise<number> {
+    const result = await tx.execute(staleEpisodeSql(deviceHash, tauMinutes));
+    const row = result.rows[0] as { closed?: number } | undefined;
+    return row?.closed ?? 0;
   }
 
   async findStopByCode(tx: Transaction, code: string): Promise<StopRecord | null> {
@@ -234,62 +309,63 @@ export class EpisodesRepository {
     });
   }
 
-  async endEpisode(
+  async lockForUpdate(
     tx: Transaction,
     id: string,
     deviceHash: string,
-    input: EndEpisodeValues,
-  ): Promise<Episode> {
-    const locked = await tx
-      .select(episodeSelection)
+  ): Promise<LockedEpisode | null> {
+    const rows = await tx
+      .select(lockSelection)
       .from(waitEpisodes)
       .innerJoin(stops, eq(waitEpisodes.stopId, stops.id))
       .where(and(eq(waitEpisodes.id, id), eq(waitEpisodes.deviceHash, deviceHash)))
       .for('update', { of: waitEpisodes })
       .limit(1);
-    const existing = locked[0];
-    if (existing === undefined) {
-      throw new AppError('NOT_FOUND', { detail: 'Episode tidak ditemukan.' });
-    }
-    if (existing.outcome !== null) {
-      throw new AppError('INVALID_TRANSITION', {
-        detail: 'Episode ini sudah selesai.',
-      });
-    }
-    if (input.clientEndedAt.getTime() < existing.startedAt.getTime()) {
-      throw new AppError('VALIDATION_FAILED', {
-        detail: 'Waktu selesai tidak boleh sebelum waktu mulai.',
-        errors: [
-          {
-            field: 'clientEndedAt',
-            code: 'before_start',
-            message: 'clientEndedAt harus setelah episode dimulai.',
-          },
-        ],
-      });
-    }
+    return rows[0] ?? null;
+  }
 
-    const endedAt = new Date();
+  async applyEnd(
+    tx: Transaction,
+    id: string,
+    deviceHash: string,
+    input: EndEpisodeValues,
+    stop: EpisodeStop,
+  ): Promise<Episode> {
     const rows = await tx
       .update(waitEpisodes)
       .set({
         outcome: input.outcome,
-        endedAt,
+        endedAt: input.endedAt,
         clientEndedAt: input.clientEndedAt,
         note: input.note,
+        timeSource: input.timeSource,
+        ...(input.qualityFlags.length === 0
+          ? {}
+          : {
+              qualityFlags: appendFlags(
+                sql`${waitEpisodes.qualityFlags}`,
+                input.qualityFlags,
+              ),
+            }),
       })
-      .where(and(eq(waitEpisodes.id, id), eq(waitEpisodes.deviceHash, deviceHash)))
+      .where(
+        and(
+          eq(waitEpisodes.id, id),
+          eq(waitEpisodes.deviceHash, deviceHash),
+          isNull(waitEpisodes.outcome),
+        ),
+      )
       .returning(episodeColumns);
     const row = rows[0];
     if (row === undefined) {
-      throw new AppError('INTERNAL_ERROR', {
-        detail: 'Episode gagal diperbarui.',
+      throw new AppError('INVALID_TRANSITION', {
+        detail: 'Episode ini sudah selesai.',
       });
     }
     return toEpisode({
       ...row,
-      stopCode: existing.stopCode,
-      stopName: existing.stopName,
+      stopCode: stop.code,
+      stopName: stop.name,
     });
   }
 

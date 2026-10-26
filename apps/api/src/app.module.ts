@@ -13,10 +13,22 @@ import { StopsModule } from './modules/stops/stops.module';
 import { EpisodesModule } from './modules/episodes/episodes.module';
 import { QrLandingModule } from './modules/qr-landing/qr-landing.module';
 import { EstimatesModule } from './modules/estimates/estimates.module';
+import { MetaController } from './modules/meta/meta.controller';
+import { TriageModule } from './modules/triage/triage.module';
 
 @Module({
-  imports: [DbModule, RateLimitModule, IdempotencyModule, DevicesModule, StopsModule, EpisodesModule, QrLandingModule, EstimatesModule],
-  controllers: [AppController, HealthController],
+  imports: [
+    DbModule,
+    RateLimitModule,
+    IdempotencyModule,
+    DevicesModule,
+    StopsModule,
+    EpisodesModule,
+    QrLandingModule,
+    EstimatesModule,
+    TriageModule,
+  ],
+  controllers: [AppController, HealthController, MetaController],
   providers: [
     AppService,
     { provide: APP_GUARD, useClass: RateLimitGuard },

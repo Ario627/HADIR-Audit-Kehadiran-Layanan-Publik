@@ -11,13 +11,13 @@ Dokumentasi lengkap ada di [`../docs/00-INDEX.md`](../docs/00-INDEX.md).
 | Bagian | Status |
 |---|---|
 | Dokumentasi | ✅ 25 file, `draft` |
-| `apps/api` | 🟡 Walking skeleton: health, stops, episodes, descriptive estimate, triage stub |
+| `apps/api` | 🟡 Walking skeleton: health, stops, episodes, descriptive estimate; seed demo |
 | `apps/web` | 🟡 Landing, QR stop page, wait ticket, methodology |
 | `packages/contracts` | ✅ Zod schemas, CJS build |
 | `packages/domain` | ✅ Evidence levels, presence trust, wait stats, formatting |
-| PostgreSQL/PostGIS | ⚪ Compose siap; skema & migrasi belum |
-| Estimator (FastAPI) | ⚪ Spesifikasi siap; implementasi belum |
-| Data lapangan | ⚪ Belum ada. Semua halte di API adalah contoh (`isDemo: true`) |
+| PostgreSQL/PostGIS | 🟡 Migrasi 0001–0004 + seed demo; belum ada estimator |
+| Estimator | ⚪ Spesifikasi siap; implementasi belum |
+| Data lapangan | ⚪ Belum ada. Seed demo ditandai `isDemo` dan `simulated` |
 
 ## Quickstart
 
@@ -36,16 +36,16 @@ pnpm dev:web        # http://localhost:5173
 
 Vite mem-proxy `/v1` ke `http://localhost:3000`, jadi tidak perlu CORS di dev.
 
-### Seed angka demo (opsional)
+### Seed data demo
 
 ```bash
-curl -X POST http://localhost:3000/v1/dev/simulate \
-  -H 'content-type: application/json' \
-  -d '{"stopCode":"BMS-A12","n":34}'
+pnpm --filter @hadir/api db:migrate
+pnpm --filter @hadir/api db:seed
 ```
 
-Semua baris diberi `qualityFlags: ["simulated"]`; UI menampilkan label **SIMULASI** dan tidak
-memakainya untuk menyimpulkan.
+Seed membuat 1 kota, 2 koridor, 12 halte, 3 perangkat demo, dan 200 episode simulasi.
+Semua episode diberi `qualityFlags: ["simulated"]`; estimator publik tidak memakainya untuk
+menyimpulkan, dan UI harus menampilkan label **SIMULASI**. Jalankan seed hanya di development.
 
 ### Infrastruktur lokal
 
@@ -85,7 +85,8 @@ docs/                 Product, architecture, security, design, roadmap
 - **TypeScript 6.0.2, bukan 7.0.2.** NestJS membutuhkan `emitDecoratorMetadata`; port native
   TS 7 belum divalidasi untuk decorator legacy. Spike ada di `docs/19-ADR.md` (ADR-026).
 - **SPA, bukan SSR.** TanStack Start belum dipakai; lihat ADR-006.
-- **In-memory API.** Semua state hilang saat restart. Milestone berikutnya: PostGIS + Drizzle.
+- **State di PostgreSQL.** Episode, perangkat, idempotensi, outbox, dan audit memakai PostGIS +
+  Drizzle. Seed demo dapat dijalankan ulang tanpa menyentuh data non-demo.
 - **Estimasi masih deskriptif.** `methodVersion: simple-stats-v0`; tidak ada CI, tidak ada
   Kaplan–Meier, dan `direction` selalu `inconclusive` sampai estimator aktif.
 - **Data contoh.** Jangan mengutip angka build ini sebagai temuan lapangan.

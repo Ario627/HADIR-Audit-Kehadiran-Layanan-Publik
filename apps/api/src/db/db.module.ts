@@ -12,7 +12,6 @@ import {
   closeDatabase,
   db,
   poolStats,
-  type Database,
   type DatabaseHealth,
   type PoolStats,
 } from './client';

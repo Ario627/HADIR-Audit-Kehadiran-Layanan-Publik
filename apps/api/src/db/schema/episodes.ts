@@ -101,6 +101,9 @@ export const waitEpisodes = pgTable(
       table.startedAt.desc(),
     ),
     index('ix_wait_episodes_client_event').on(table.clientEventId),
+    index('ix_wait_episodes_active_device')
+      .on(table.deviceHash, table.startedAt.desc())
+      .where(sql`${table.outcome} IS NULL`),
     check(
       'ck_wait_episodes_time_order',
       sql`${table.endedAt} IS NULL OR ${table.endedAt} >= ${table.startedAt}`,

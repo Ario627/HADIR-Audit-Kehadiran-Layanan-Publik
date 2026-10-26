@@ -95,3 +95,79 @@ export const auditActorType = pgEnum('audit_actor_type', [
   'moderator',
   'superadmin',
 ]);
+export const sourceTier = pgEnum('source_tier', ['T1', 'T2', 'T3', 'T4']);
+export const evidenceLevel = pgEnum('evidence_level', [
+  'none',
+  'indication',
+  'strong',
+  'field_verified',
+]);
+export const triageVerdict = pgEnum('triage_verdict', [
+  'join',
+  'already_planned',
+  'wrong_authority',
+  'service_not_running',
+  'data_supports',
+  'data_insufficient',
+  'new_report',
+]);
+export const experimentArm = pgEnum('experiment_arm', ['control', 'triage']);
+export const reportCategory = pgEnum('report_category', [
+  'service_wait',
+  'service_no_show',
+  'service_full',
+  'stop_facility',
+  'stop_cleanliness',
+  'stop_safety',
+  'route_info',
+  'accessibility',
+  'other',
+]);
+export const reportStatus = pgEnum('report_status', [
+  'draft',
+  'submitted',
+  'triaged',
+  'acknowledged',
+  'in_progress',
+  'claimed_resolved',
+  'verified_resolved',
+  'disputed',
+  'rejected',
+  'closed',
+]);
+export const moderationStatus = pgEnum('moderation_status', [
+  'pending',
+  'approved',
+  'rejected',
+  'quarantined',
+]);
+export const reportEventKind = pgEnum('report_event_kind', [
+  'submitted',
+  'triaged',
+  'acknowledged',
+  'info_requested',
+  'scheduled',
+  'responded',
+  'claimed_resolved',
+  'verified_resolved',
+  'disputed',
+  'rejected',
+  'moderated',
+  'corrected',
+]);
+export const closureAnswer = pgEnum('closure_answer', ['yes', 'no', 'partial']);
+export const institutionKind = pgEnum('institution_kind', [
+  'dinhub',
+  'dishub',
+  'pupr',
+  'diskominfo',
+  'operator',
+  'other',
+]);
+export const noticeKind = pgEnum('notice_kind', [
+  'detour',
+  'repair',
+  'suspension',
+  'schedule',
+  'other',
+]);

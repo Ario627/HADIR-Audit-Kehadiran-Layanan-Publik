@@ -43,6 +43,12 @@ export const RATE_LIMIT_POLICIES = {
     windowMs: 60_000,
     scope: 'ip',
   },
+  coverageRead: {
+    name: 'coverage-read',
+    limit: 30,
+    windowMs: 60_000,
+    scope: 'ip',
+  },
   episodeStartHourly: {
     name: 'episode-start-hourly',
     limit: 6,
@@ -78,6 +84,12 @@ export const RATE_LIMIT_POLICIES = {
     limit: 30,
     windowMs: 3_600_000,
     scope: 'device',
+  },
+  triageRead: {
+    name: 'triage-read',
+    limit: 120,
+    windowMs: 60_000,
+    scope: 'device+ip',
   },
   reportHourly: {
     name: 'report-hourly',

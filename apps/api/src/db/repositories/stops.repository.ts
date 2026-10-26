@@ -36,6 +36,46 @@ export interface StopListResult {
   hasMore: boolean;
 }
 
+export interface RouteListQuery {
+  city?: string;
+  limit: number;
+  cursor?: string;
+}
+
+export interface RouteRecord {
+  id: string;
+  code: string;
+  name: string;
+  mode: 'brt' | 'non_brt' | 'feeder' | 'other';
+  status: 'active' | 'suspended' | 'stopped' | 'planned';
+  promisedHeadwayPeakMin: number | null;
+  promisedHeadwayOffMin: number | null;
+  headwaySourceUrl: string | null;
+  headwayValidFrom: string | null;
+  headwayValidTo: string | null;
+  stopCount: number;
+}
+
+export interface RouteListResult {
+  items: RouteRecord[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+export interface RouteStopRecord {
+  stopId: string;
+  stopCode: string;
+  stopName: string;
+  direction: number;
+  seq: number;
+  status: 'active' | 'inactive' | 'moved' | 'planned';
+}
+
+export const routeRepositoryLimits = Object.freeze({
+  maxRouteStops: 500,
+  maxRoutesPerPage: 100,
+});
+
 const stopSelection = {
   id: stops.id,
   code: stops.code,
@@ -57,6 +97,58 @@ const routeSelection = {
   promisedHeadwayPeakMin: routes.promisedHeadwayPeakMin,
   headwaySourceUrl: routes.headwaySourceUrl,
 };
+
+const routeListSelection = {
+  id: routes.id,
+  code: routes.code,
+  name: routes.name,
+  mode: routes.mode,
+  status: routes.status,
+  promisedHeadwayPeakMin: routes.promisedHeadwayPeakMin,
+  promisedHeadwayOffMin: routes.promisedHeadwayOffMin,
+  headwaySourceUrl: routes.headwaySourceUrl,
+  headwayValidFrom: routes.headwayValidFrom,
+  headwayValidTo: routes.headwayValidTo,
+  createdAt: routes.createdAt,
+  stopCount: sql<number>`count(${routeStops.stopId})::int`,
+};
+
+const routeStopSelection = {
+  stopId: routeStops.stopId,
+  stopCode: stops.code,
+  stopName: stops.name,
+  direction: routeStops.direction,
+  seq: routeStops.seq,
+  status: stops.status,
+};
+
+function toRouteRecord(row: {
+  id: string;
+  code: string;
+  name: string;
+  mode: RouteRecord['mode'];
+  status: RouteRecord['status'];
+  promisedHeadwayPeakMin: number | null;
+  promisedHeadwayOffMin: number | null;
+  headwaySourceUrl: string | null;
+  headwayValidFrom: string | null;
+  headwayValidTo: string | null;
+  stopCount: number;
+}): RouteRecord {
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    mode: row.mode,
+    status: row.status,
+    promisedHeadwayPeakMin: row.promisedHeadwayPeakMin,
+    promisedHeadwayOffMin: row.promisedHeadwayOffMin,
+    headwaySourceUrl: row.headwaySourceUrl,
+    headwayValidFrom: row.headwayValidFrom,
+    headwayValidTo: row.headwayValidTo,
+    stopCount: Number(row.stopCount),
+  };
+}
 
 function escapeLike(value: string): string {
   return value
@@ -208,5 +300,72 @@ export class StopsRepository {
     }
     const grouped = await this.loadRoutes([row.id]);
     return toDetail(row, grouped);
+  }
+
+  async listRoutes(input: RouteListQuery): Promise<RouteListResult> {
+    const conditions: SQL[] = [];
+    if (input.city !== undefined) {
+      conditions.push(eq(cities.code, input.city));
+    }
+    if (input.cursor !== undefined) {
+      const cursor = decodeCursor(input.cursor);
+      conditions.push(
+        sql`(${routes.createdAt}, ${routes.id}) < (${cursor.createdAt}, ${cursor.id})`,
+      );
+    }
+    const where = conditions.length === 0 ? undefined : and(...conditions);
+
+    const rows = await this.db
+      .select(routeListSelection)
+      .from(routes)
+      .innerJoin(cities, eq(routes.cityId, cities.id))
+      .leftJoin(routeStops, eq(routeStops.routeId, routes.id))
+      .where(where)
+      .groupBy(routes.id, cities.code)
+      .orderBy(desc(routes.createdAt), desc(routes.id))
+      .limit(input.limit + 1);
+
+    const hasMore = rows.length > input.limit;
+    const visible = hasMore ? rows.slice(0, input.limit) : rows;
+    const last = visible[visible.length - 1];
+    return {
+      items: visible.map(toRouteRecord),
+      nextCursor:
+        hasMore && last !== undefined
+          ? encodeCursor({ createdAt: last.createdAt, id: last.id })
+          : null,
+      hasMore,
+    };
+  }
+
+  async findRouteById(id: string): Promise<RouteRecord | null> {
+    const rows = await this.db
+      .select(routeListSelection)
+      .from(routes)
+      .innerJoin(cities, eq(routes.cityId, cities.id))
+      .leftJoin(routeStops, eq(routeStops.routeId, routes.id))
+      .where(eq(routes.id, id))
+      .groupBy(routes.id, cities.code)
+      .limit(1);
+    const row = rows[0];
+    return row === undefined ? null : toRouteRecord(row);
+  }
+
+  async listRouteStops(routeId: string): Promise<RouteStopRecord[]> {
+    const rows = await this.db
+      .select(routeStopSelection)
+      .from(routeStops)
+      .innerJoin(stops, eq(stops.id, routeStops.stopId))
+      .where(eq(routeStops.routeId, routeId))
+      .orderBy(asc(routeStops.direction), asc(routeStops.seq))
+      .limit(routeRepositoryLimits.maxRouteStops);
+    return rows.map((row) => ({
+      stopId: row.stopId,
+      stopCode: row.stopCode,
+      stopName: row.stopName,
+      direction: row.direction,
+      seq: row.seq,
+      status: row.status,
+    }));
   }
 }

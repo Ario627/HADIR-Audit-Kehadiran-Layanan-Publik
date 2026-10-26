@@ -8,10 +8,16 @@ import {
 
 export const EstimateMetrics = z.object({
   n: z.number().int().nonnegative(),
+  nEffective: z.number().nonnegative().nullable(),
   medianMin: z.number().nonnegative().nullable(),
-  p95Min: z.number().nonnegative().nullable(),
   meanMin: z.number().nonnegative().nullable(),
+  rmstMin: z.number().nonnegative().nullable(),
+  p95Min: z.number().nonnegative().nullable(),
+  ewtMin: z.number().nullable(),
   abandonRate: z.number().min(0).max(1).nullable(),
+  fullRate: z.number().min(0).max(1).nullable(),
+  cifAbandon: z.number().min(0).max(1).nullable(),
+  timeToBoardRmstMin: z.number().nonnegative().nullable(),
   ci: z
     .object({
       low: z.number(),
@@ -51,6 +57,13 @@ export const Estimate = z.object({
   message: z.string(),
   warnings: z.array(z.string().max(80)).max(20),
   simulated: z.boolean(),
+  sample: z.object({
+    days: z.number().int().nonnegative(),
+    devices: z.number().int().nonnegative(),
+    clusters: z.number().int().nonnegative(),
+    designEffect: z.number().nonnegative(),
+    thresholdMin: z.number().nonnegative().nullable(),
+  }),
   computedAt: IsoDateTime,
   methodVersion: z.string(),
 });
