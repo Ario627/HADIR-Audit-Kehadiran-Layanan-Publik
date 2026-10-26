@@ -186,7 +186,7 @@ export const idempotencyKeys = pgTable(
     ),
     check(
       'ck_idempotency_keys_status',
-      sql`${table.responseStatus} BETWEEN 100 AND 599`,
+      sql`${table.responseStatus} BETWEEN 0 AND 599`,
     ),
   ],
 );

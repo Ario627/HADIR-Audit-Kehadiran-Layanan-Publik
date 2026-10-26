@@ -4,8 +4,10 @@ import {
   Logger,
   Module,
   type OnApplicationShutdown,
+  type OnModuleInit,
 } from '@nestjs/common';
 import {
+  assertDatabasePrivileges,
   checkDatabase,
   closeDatabase,
   db,
@@ -38,8 +40,12 @@ export class DbHealthService {
 }
 
 @Injectable()
-export class DbLifecycle implements OnApplicationShutdown {
+export class DbLifecycle implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(DbLifecycle.name);
+
+  async onModuleInit(): Promise<void> {
+    await assertDatabasePrivileges();
+  }
 
   async onApplicationShutdown(): Promise<void> {
     await closeDatabase();

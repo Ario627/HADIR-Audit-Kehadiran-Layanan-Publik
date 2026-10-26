@@ -67,38 +67,68 @@ export const db: Database = drizzle(pool, { schema });
 
 export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+export async function configureTransaction(
+  tx: Transaction,
+  context: TransactionContext = {},
+): Promise<void> {
+  await tx.execute(
+    sql`SELECT set_config('statement_timeout', ${String(env.DB_STATEMENT_TIMEOUT_MS)}, true)`,
+  );
+  await tx.execute(
+    sql`SELECT set_config('idle_in_transaction_session_timeout', ${String(env.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS)}, true)`,
+  );
+  await tx.execute(
+    sql`SELECT set_config('lock_timeout', ${String(env.DB_LOCK_TIMEOUT_MS)}, true)`,
+  );
+  if (context.requestId !== undefined) {
+    if (!/^[A-Za-z0-9-]{8,64}$/.test(context.requestId)) {
+      throw new Error('requestId tidak valid untuk konteks database.');
+    }
+    await tx.execute(
+      sql`SELECT set_config('app.request_id', ${context.requestId}, true)`,
+    );
+  }
+  if (context.deviceHash !== undefined) {
+    if (!/^[a-f0-9]{64}$/.test(context.deviceHash)) {
+      throw new Error('deviceHash tidak valid untuk konteks database.');
+    }
+    await tx.execute(
+      sql`SELECT set_config('app.device_hash', ${context.deviceHash}, true)`,
+    );
+  }
+}
+
 export async function withTransaction<T>(
   callback: (tx: Transaction) => Promise<T>,
   context: TransactionContext = {},
 ): Promise<T> {
   return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT set_config('statement_timeout', ${String(env.DB_STATEMENT_TIMEOUT_MS)}, true)`,
-    );
-    await tx.execute(
-      sql`SELECT set_config('idle_in_transaction_session_timeout', ${String(env.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS)}, true)`,
-    );
-    await tx.execute(
-      sql`SELECT set_config('lock_timeout', ${String(env.DB_LOCK_TIMEOUT_MS)}, true)`,
-    );
-    if (context.requestId !== undefined) {
-      if (!/^[A-Za-z0-9-]{8,64}$/.test(context.requestId)) {
-        throw new Error('requestId tidak valid untuk konteks database.');
-      }
-      await tx.execute(
-        sql`SELECT set_config('app.request_id', ${context.requestId}, true)`,
-      );
-    }
-    if (context.deviceHash !== undefined) {
-      if (!/^[a-f0-9]{64}$/.test(context.deviceHash)) {
-        throw new Error('deviceHash tidak valid untuk konteks database.');
-      }
-      await tx.execute(
-        sql`SELECT set_config('app.device_hash', ${context.deviceHash}, true)`,
-      );
-    }
+    await configureTransaction(tx, context);
     return callback(tx);
   });
+}
+
+export async function assertDatabasePrivileges(): Promise<void> {
+  if (!env.isProduction) {
+    return;
+  }
+  const result = await pool.query<{
+    rolsuper: boolean;
+    rolcreatedb: boolean;
+    rolcreaterole: boolean;
+    rolbypassrls: boolean;
+  }>(
+    'SELECT rolsuper, rolcreatedb, rolcreaterole, rolbypassrls FROM pg_roles WHERE rolname = current_user',
+  );
+  const role = result.rows[0];
+  if (!role) {
+    throw new Error('Role database aplikasi tidak ditemukan.');
+  }
+  if (role.rolsuper || role.rolcreatedb || role.rolcreaterole || role.rolbypassrls) {
+    throw new Error(
+      'DATABASE_URL memakai role dengan hak istimewa. Gunakan role aplikasi least-privilege.',
+    );
+  }
 }
 
 export async function checkDatabase(): Promise<DatabaseHealth> {

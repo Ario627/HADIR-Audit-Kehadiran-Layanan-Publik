@@ -49,6 +49,7 @@ export const Estimate = z.object({
   evidence: EvidenceLevel,
   direction: Direction,
   message: z.string(),
+  warnings: z.array(z.string().max(80)).max(20),
   simulated: z.boolean(),
   computedAt: IsoDateTime,
   methodVersion: z.string(),

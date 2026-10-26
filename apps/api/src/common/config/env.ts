@@ -42,6 +42,7 @@ const EnvSchema = z.object({
   DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(500).max(60_000).default(10_000),
   DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
   DB_LOCK_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
+  DB_MIGRATION_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(600_000).default(120_000),
   DB_APPLICATION_NAME: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/).default('hadir-api'),
   DB_SSL_MODE: z.enum(['disable', 'require', 'verify-full']).default('disable'),
   DB_SSL_CA: z.string().optional(),
@@ -116,6 +117,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
   }
   if (value.NODE_ENV === 'production' && value.REDIS_URL === DEV_REDIS_URL) {
     throw new Error('REDIS_URL wajib diisi dengan instance nyata di production.');
+  }
+  if (value.NODE_ENV === 'production' && !value.QR_KEYRING_JSON?.trim()) {
+    throw new Error('QR_KEYRING_JSON wajib diisi di production.');
   }
   if (
     value.NODE_ENV === 'production' &&

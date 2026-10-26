@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS ix_stops_created_id ON stops (created_at DESC, id DESC);

@@ -7,7 +7,7 @@ const ssl = env.DB_SSL_MODE === 'disable' ? false : env.DB_SSL_MODE;
 export default defineConfig({
   dialect: 'postgresql',
   schema: './src/db/schema/index.ts',
-  out: './src/db/migrations',
+  out: './db/generated',
   casing: 'snake_case',
   strict: true,
   verbose: true,

@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   check,
   date,
   index,
@@ -91,14 +92,17 @@ export const stops = pgTable(
     geofenceRadiusM: integer('geofence_radius_m').notNull().default(150),
     status: stopStatus('status').notNull().default('active'),
     qrAssetUrl: text('qr_asset_url'),
+    isDemo: boolean('is_demo').notNull().default(false),
     ...timestamps(),
   },
   (table) => [
     uniqueIndex('uq_stops_city_code').on(table.cityId, table.code),
+    uniqueIndex('uq_stops_code_global').on(table.code),
     check('ck_stops_code_format', sql`${table.code} ~ '^[A-Z0-9][A-Z0-9-]{2,11}$'`),
     check('ck_stops_name_length', sql`char_length(${table.name}) BETWEEN 1 AND 160`),
     index('ix_stops_geom').using('gist', table.geom),
     index('ix_stops_name_trgm').using('gin', sql`${table.name} gin_trgm_ops`),
+    index('ix_stops_created_id').on(table.createdAt.desc(), table.id.desc()),
     check(
       'ck_stops_geofence_radius',
       sql`${table.geofenceRadiusM} BETWEEN 50 AND 500`,

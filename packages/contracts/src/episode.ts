@@ -107,6 +107,7 @@ export const Episode = z.object({
   trustWeight: z.number().min(0).max(1),
   startedAt: IsoDateTime,
   endedAt: IsoDateTime.nullable(),
+  status: z.enum(['active', 'ended']),
   durationS: z.number().int().nonnegative().nullable(),
   outcome: EpisodeOutcome.nullable(),
   qualityFlags: z.array(z.string().max(64)).max(20),

@@ -2,14 +2,20 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { IdempotencyModule } from './common/idempotency/idempotency.module';
 import { RateLimitGuard } from './common/http/rate-limit.guard';
 import { RateLimitModule } from './common/http/rate-limit.module';
 import { CsrfGuard } from './common/security/csrf.guard';
 import { HealthController } from './health/health.controller';
 import { DbModule } from './db/db.module';
+import { DevicesModule } from './modules/devices/devices.module';
+import { StopsModule } from './modules/stops/stops.module';
+import { EpisodesModule } from './modules/episodes/episodes.module';
+import { QrLandingModule } from './modules/qr-landing/qr-landing.module';
+import { EstimatesModule } from './modules/estimates/estimates.module';
 
 @Module({
-  imports: [RateLimitModule, DbModule],
+  imports: [DbModule, RateLimitModule, IdempotencyModule, DevicesModule, StopsModule, EpisodesModule, QrLandingModule, EstimatesModule],
   controllers: [AppController, HealthController],
   providers: [
     AppService,
