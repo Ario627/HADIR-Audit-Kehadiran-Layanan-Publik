@@ -478,4 +478,62 @@ export class ReportsRepository {
       .limit(1);
     return rows[0]?.id ?? null;
   }
+
+  async findReportIdInInstitution(
+    tx: Transaction,
+    publicId: string,
+    institutionId: string,
+  ): Promise<string | null> {
+    const rows = await tx
+      .select({ id: reports.id })
+      .from(reports)
+      .where(and(eq(reports.publicId, publicId), eq(reports.institutionId, institutionId)))
+      .limit(1);
+    return rows[0]?.id ?? null;
+  }
+
+  async lockReportInInstitution(
+    tx: Transaction,
+    reportId: string,
+    institutionId: string,
+  ): Promise<{ status: StoredReportStatus; deviceHash: string } | null> {
+    const rows = await tx
+      .select({ status: reports.status, deviceHash: reports.deviceHash })
+      .from(reports)
+      .where(and(eq(reports.id, reportId), eq(reports.institutionId, institutionId)))
+      .for('update')
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  async listForInstitution(
+    institutionId: string,
+    filters: ReportListFilters,
+  ): Promise<{ items: ReportRow[]; hasMore: boolean }> {
+    const conditions: SQL[] = [eq(reports.institutionId, institutionId)];
+    if (filters.category !== null) {
+      conditions.push(eq(reports.category, filters.category as StoredReportCategory));
+    }
+    if (filters.status !== null) {
+      conditions.push(eq(reports.status, filters.status as StoredReportStatus));
+    }
+    if (filters.cursor !== null) {
+      conditions.push(
+        sql`(${reports.createdAt}, ${reports.id}) < (${filters.cursor.createdAt}, ${filters.cursor.id})`,
+      );
+    }
+    const rows = await baseQuery(this.db)
+      .where(and(...conditions))
+      .orderBy(desc(reports.createdAt), desc(reports.id))
+      .limit(Math.min(filters.limit, MAX_LIST_LIMIT) + 1);
+    const hasMore = rows.length > filters.limit;
+    return { items: hasMore ? rows.slice(0, filters.limit) : rows, hasMore };
+  }
+
+  async findInInstitution(publicId: string, institutionId: string): Promise<ReportRow | null> {
+    const rows = await baseQuery(this.db)
+      .where(and(eq(reports.publicId, publicId), eq(reports.institutionId, institutionId)))
+      .limit(1);
+    return rows[0] ?? null;
+  }
 }

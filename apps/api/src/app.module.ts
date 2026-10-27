@@ -17,6 +17,7 @@ import { MetaController } from './modules/meta/meta.controller';
 import { TriageModule } from './modules/triage/triage.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { RunwayModule } from './modules/runway/runway.module';
+import { PartnerModule } from './modules/partner/partner.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { RunwayModule } from './modules/runway/runway.module';
     TriageModule,
     ReportsModule,
     RunwayModule,
+    PartnerModule,
   ],
   controllers: [AppController, HealthController, MetaController],
   providers: [

@@ -9,3 +9,4 @@ export * from './triage';
 export * from './report';
 export * from './errors';
 export * from './runway';
+export * from './partner';

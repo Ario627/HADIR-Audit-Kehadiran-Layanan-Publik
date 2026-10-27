@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as MetodologiRouteImport } from './routes/metodologi'
+import { Route as RingkasanEpisodeIdRouteImport } from './routes/ringkasan.$episodeId'
 import { Route as SStopCodeRouteImport } from './routes/s.$stopCode'
 import { Route as WaitEpisodeIdRouteImport } from './routes/wait.$episodeId'
 
@@ -22,6 +23,11 @@ const IndexRoute = IndexRouteImport.update({
 const MetodologiRoute = MetodologiRouteImport.update({
   id: '/metodologi',
   path: '/metodologi',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RingkasanEpisodeIdRoute = RingkasanEpisodeIdRouteImport.update({
+  id: '/ringkasan/$episodeId',
+  path: '/ringkasan/$episodeId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SStopCodeRoute = SStopCodeRouteImport.update({
@@ -38,12 +44,14 @@ const WaitEpisodeIdRoute = WaitEpisodeIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/metodologi': typeof MetodologiRoute
+  '/ringkasan/$episodeId': typeof RingkasanEpisodeIdRoute
   '/s/$stopCode': typeof SStopCodeRoute
   '/wait/$episodeId': typeof WaitEpisodeIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/metodologi': typeof MetodologiRoute
+  '/ringkasan/$episodeId': typeof RingkasanEpisodeIdRoute
   '/s/$stopCode': typeof SStopCodeRoute
   '/wait/$episodeId': typeof WaitEpisodeIdRoute
 }
@@ -51,20 +59,38 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/metodologi': typeof MetodologiRoute
+  '/ringkasan/$episodeId': typeof RingkasanEpisodeIdRoute
   '/s/$stopCode': typeof SStopCodeRoute
   '/wait/$episodeId': typeof WaitEpisodeIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/metodologi' | '/s/$stopCode' | '/wait/$episodeId'
+  fullPaths:
+    | '/'
+    | '/metodologi'
+    | '/ringkasan/$episodeId'
+    | '/s/$stopCode'
+    | '/wait/$episodeId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/metodologi' | '/s/$stopCode' | '/wait/$episodeId'
-  id: '__root__' | '/' | '/metodologi' | '/s/$stopCode' | '/wait/$episodeId'
+  to:
+    | '/'
+    | '/metodologi'
+    | '/ringkasan/$episodeId'
+    | '/s/$stopCode'
+    | '/wait/$episodeId'
+  id:
+    | '__root__'
+    | '/'
+    | '/metodologi'
+    | '/ringkasan/$episodeId'
+    | '/s/$stopCode'
+    | '/wait/$episodeId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   MetodologiRoute: typeof MetodologiRoute
+  RingkasanEpisodeIdRoute: typeof RingkasanEpisodeIdRoute
   SStopCodeRoute: typeof SStopCodeRoute
   WaitEpisodeIdRoute: typeof WaitEpisodeIdRoute
 }
@@ -83,6 +109,13 @@ declare module '@tanstack/react-router' {
       path: '/metodologi'
       fullPath: '/metodologi'
       preLoaderRoute: typeof MetodologiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ringkasan/$episodeId': {
+      id: '/ringkasan/$episodeId'
+      path: '/ringkasan/$episodeId'
+      fullPath: '/ringkasan/$episodeId'
+      preLoaderRoute: typeof RingkasanEpisodeIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/s/$stopCode': {
@@ -105,6 +138,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   MetodologiRoute: MetodologiRoute,
+  RingkasanEpisodeIdRoute: RingkasanEpisodeIdRoute,
   SStopCodeRoute: SStopCodeRoute,
   WaitEpisodeIdRoute: WaitEpisodeIdRoute,
 }

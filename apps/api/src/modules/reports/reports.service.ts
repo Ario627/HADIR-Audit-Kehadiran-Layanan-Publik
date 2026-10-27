@@ -5,6 +5,7 @@ import type {
   ListReportsQuery,
   MyReportsQuery,
   PartnerActionInput,
+  PartnerInboxQuery,
   PartnerActionResult,
   ReportCategory,
   ReportDetail,
@@ -13,8 +14,9 @@ import type {
   VerifyClosureInput,
 } from '@hadir/contracts';
 import { AuditService } from '../../common/audit/audit.service';
+import type { PartnerSession } from '../../common/auth/partner-session';
+import { assertPartnerCanAct } from '../partner/partner-scope';
 import { AppError } from '../../common/errors/app-error';
-import { env } from '../../common/config/env';
 import { parseBbox } from '../../common/geo/bbox';
 import { decodeCursor, encodeCursor } from '../../common/http/cursor';
 import { idempotencyHash } from '../../common/http/idempotency-key';
@@ -205,10 +207,6 @@ export function partnerTransition(
   return allowedPartnerActions(status).includes(action)
     ? PARTNER_TARGET[action]
     : null;
-}
-
-export function partnerActionAllowed(mode: { devTools: boolean }): boolean {
-  return mode.devTools;
 }
 
 export function eventKindForAction(action: PartnerActionKind): StoredEventKind {
@@ -425,6 +423,33 @@ export class ReportsService {
     };
   }
 
+  async listInbox(
+    query: PartnerInboxQuery,
+    session: PartnerSession,
+  ): Promise<ReportListResult> {
+    const { items, hasMore } = await this.repository.listForInstitution(session.institutionId, {
+      category: query.category ?? null,
+      status: query.status ?? null,
+      bbox: null,
+      cursor: parseCursor(query.cursor),
+      limit: query.limit,
+    });
+    return {
+      items: items.map(toListItem),
+      nextCursor: nextCursorOf(items, hasMore),
+      hasMore,
+    };
+  }
+
+  async inboxDetail(publicId: string, session: PartnerSession): Promise<ReportDetail> {
+    const report = await this.repository.findInInstitution(publicId, session.institutionId);
+    if (report === null) {
+      throw new AppError('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
+    }
+    const events = await this.repository.listEvents(report.id);
+    return toDetail(report, events);
+  }
+
   async listMine(query: MyReportsQuery, device: DeviceIdentity): Promise<ReportListResult> {
     assertDevice(device);
     const { items, hasMore } = await this.repository.listForDevice(
@@ -629,38 +654,41 @@ export class ReportsService {
     publicId: string,
     input: PartnerActionInput,
     key: string,
-    device: DeviceIdentity,
+    session: PartnerSession,
     context: IdempotencyContext,
-    mode: { devTools: boolean } = { devTools: env.devTools },
   ): Promise<PartnerActionResult> {
-    if (!partnerActionAllowed(mode)) {
-      await this.audit.denial({
-        attempted: 'report.partner_action',
-        reason: 'partner_mode_disabled',
-        objectType: 'report',
-        objectId: publicId,
-        requestId: context.requestId,
-      });
-      throw new AppError('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
-    }
-    assertDevice(device);
+    assertPartnerCanAct(session);
     const note = sanitizeNote(input.note);
     const reason = sanitizeNote(input.reason);
+    const institutionId = session.institutionId;
 
     const result = await this.idempotency.execute(
       {
-        scope: `report.partner.${device.hash}`,
+        scope: `report.partner.${session.userId}`,
         key,
-        requestHash: idempotencyHash({ publicId, action: input.action, note, reason }),
+        requestHash: idempotencyHash({
+          publicId,
+          action: input.action,
+          note,
+          reason,
+          institutionId,
+        }),
         ttlMs: IDEMPOTENCY_TTL_MS,
       },
       async (tx) => {
-        await this.assertDeviceRecord(tx, device.hash);
-        const reportId = await this.repository.findReportIdByPublicId(tx, publicId);
+        const reportId = await this.repository.findReportIdInInstitution(
+          tx,
+          publicId,
+          institutionId,
+        );
         if (reportId === null) {
           throw new AppError('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
         }
-        const locked = await this.repository.lockReport(tx, reportId);
+        const locked = await this.repository.lockReportInInstitution(
+          tx,
+          reportId,
+          institutionId,
+        );
         if (locked === null) {
           throw new AppError('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
         }
@@ -688,9 +716,8 @@ export class ReportsService {
             to: target,
             hasNote: note !== null,
             hasReason: reason !== null,
-            simulated: true,
           },
-          { type: 'partner', id: 'dev-partner' },
+          { type: 'partner', id: session.userId },
         );
         return {
           status: 200,
@@ -698,7 +725,7 @@ export class ReportsService {
             publicId,
             status: target,
             previousStatus: locked.status,
-            simulated: true,
+            simulated: false,
           },
         };
       },
@@ -710,6 +737,12 @@ export class ReportsService {
       action: 'report.partner_action',
       objectType: 'report',
       objectId: publicId,
+      actor: {
+        kind: 'partner',
+        userId: session.userId,
+        institutionId,
+        role: session.role,
+      },
       requestId: context.requestId,
       payload: {
         partnerAction: input.action,

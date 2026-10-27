@@ -1,5 +1,5 @@
 import { auditStub } from '../../test-support/audit.stub';
-import type { DeviceIdentity } from '../../common/http/request-context';
+import type { PartnerSession } from '../../common/auth/partner-session';
 import type {
   IdempotencyContext,
   IdempotencyService,
@@ -13,23 +13,27 @@ import {
   ReportsService,
   allowedPartnerActions,
   eventKindForAction,
-  partnerActionAllowed,
   partnerTransition,
 } from './reports.service';
 
 const PUBLIC_ID = 'LPR-2026-004242';
 const REPORT_ID = '0192f0c4-0000-7000-8000-0000000000ab';
 
-const DEVICE: DeviceIdentity = {
-  hash: 'a'.repeat(64),
-  dayHash: 'b'.repeat(64),
-  isNew: false,
+const SESSION: PartnerSession = {
+  sessionId: '0192f0c4-0000-7000-8000-0000000000f1',
+  userId: '0192f0c4-0000-7000-8000-0000000000f2',
+  displayName: 'Budi',
+  institutionId: '0192f0c4-0000-7000-8000-0000000000f3',
+  institutionName: 'Dishub',
+  role: 'responder',
+  createdAt: new Date('2026-10-27T11:00:00.000Z'),
+  lastSeenAt: new Date('2026-10-27T11:59:00.000Z'),
+  expiresAt: new Date('2026-11-03T11:00:00.000Z'),
+  revokedAt: null,
 };
 
-const CONTEXT: IdempotencyContext = { requestId: 'req-1', deviceHash: DEVICE.hash };
+const CONTEXT: IdempotencyContext = { requestId: 'req-1' };
 const KEY = '0192f0c4-0000-7000-8000-000000000002';
-const DEMO = { devTools: true };
-const LIVE = { devTools: false };
 
 const ALL_STATUSES: readonly StoredReportStatus[] = [
   'draft',
@@ -51,8 +55,8 @@ interface CallLog {
 
 function repositoryDouble(status: StoredReportStatus, log: CallLog): ReportsRepository {
   return {
-    findReportIdByPublicId: async () => REPORT_ID,
-    lockReport: async () => ({ status, deviceHash: 'c'.repeat(64) }),
+    findReportIdInInstitution: async () => REPORT_ID,
+    lockReportInInstitution: async () => ({ status, deviceHash: 'c'.repeat(64) }),
     updateStatus: async (
       _tx: unknown,
       _id: string,
@@ -144,9 +148,8 @@ describe('ReportsService.partnerAction', () => {
       PUBLIC_ID,
       { action: 'acknowledge', note: 'Kami periksa minggu ini.' },
       KEY,
-      DEVICE,
+      SESSION,
       CONTEXT,
-      DEMO,
     );
 
     expect(result.status).toBe('acknowledged');
@@ -161,13 +164,12 @@ describe('ReportsService.partnerAction', () => {
       PUBLIC_ID,
       { action: 'acknowledge' },
       KEY,
-      DEVICE,
+      SESSION,
       CONTEXT,
-      DEMO,
     );
 
     expect(log.events[0]?.actorType).toBe('partner');
-    expect(log.events[0]?.payload).toMatchObject({ simulated: true });
+    expect(log.events[0]?.payload).not.toHaveProperty('simulated');
   });
 
   it('records the transition source and target', async () => {
@@ -177,9 +179,8 @@ describe('ReportsService.partnerAction', () => {
       PUBLIC_ID,
       { action: 'claim_resolved', note: 'Atap sudah ditambal pagi ini.' },
       KEY,
-      DEVICE,
+      SESSION,
       CONTEXT,
-      DEMO,
     );
 
     expect(log.events[0]?.payload).toMatchObject({
@@ -197,9 +198,8 @@ describe('ReportsService.partnerAction', () => {
         PUBLIC_ID,
         { action: 'claim_resolved', note: 'cukup panjang' },
         KEY,
-        DEVICE,
+        SESSION,
         CONTEXT,
-        DEMO,
       ),
     ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
     expect(log.statusWrites).toEqual([]);
@@ -209,7 +209,7 @@ describe('ReportsService.partnerAction', () => {
     const { service } = buildService('verified_resolved');
 
     await expect(
-      service.partnerAction(PUBLIC_ID, { action: 'acknowledge' }, KEY, DEVICE, CONTEXT, DEMO),
+      service.partnerAction(PUBLIC_ID, { action: 'acknowledge' }, KEY, SESSION, CONTEXT),
     ).rejects.toMatchObject({
       code: 'INVALID_TRANSITION',
       errors: [{ field: 'action', code: 'not_allowed' }],
@@ -223,43 +223,53 @@ describe('ReportsService.partnerAction', () => {
       PUBLIC_ID,
       { action: 'claim_resolved', note: 'Sudah diperbaiki kemarin.' },
       KEY,
-      DEVICE,
+      SESSION,
       CONTEXT,
-      DEMO,
     );
 
     expect(log.statusWrites[0]?.resolvedAt).toBeNull();
   });
 
-  it('rejects devices that never completed bootstrap', async () => {
-    const { service } = buildService('submitted');
+  it('refuses a viewer even when the transition is valid', async () => {
+    const { service, log } = buildService('submitted');
 
     await expect(
       service.partnerAction(
         PUBLIC_ID,
         { action: 'acknowledge' },
         KEY,
-        { ...DEVICE, isNew: true },
+        { ...SESSION, role: 'viewer' },
         CONTEXT,
-        DEMO,
       ),
-    ).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
-  });
-});
-
-describe('partnerActionAllowed', () => {
-  it('is enabled only when demo tooling is on', () => {
-    expect(partnerActionAllowed({ devTools: true })).toBe(true);
-    expect(partnerActionAllowed({ devTools: false })).toBe(false);
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(log.statusWrites).toEqual([]);
   });
 
-  it('hides the route entirely in live mode', async () => {
-    const { service, log } = buildService('submitted');
+  it('refuses a report that belongs to another institution', async () => {
+    const log: CallLog = { statusWrites: [], events: [] };
+    const idempotency = {
+      execute: async (
+        _input: unknown,
+        work: (tx: unknown) => Promise<{ status: number; body: unknown }>,
+      ) => {
+        const result = await work({});
+        return { status: result.status, body: result.body, replayed: false };
+      },
+    } as unknown as IdempotencyService;
+    const devices = {
+      findByHash: async () => ({ id: 'd1', trustScore: 0.5, revokedAt: null }),
+    } as unknown as DevicesRepository;
+    const repository = {
+      findReportIdInInstitution: async () => null,
+      lockReportInInstitution: async () => null,
+      updateStatus: async () => undefined,
+      appendEvent: async () => 1,
+    } as unknown as ReportsRepository;
+    const service = new ReportsService(repository, devices, idempotency, auditStub());
 
     await expect(
-      service.partnerAction(PUBLIC_ID, { action: 'acknowledge' }, KEY, DEVICE, CONTEXT, LIVE),
+      service.partnerAction(PUBLIC_ID, { action: 'acknowledge' }, KEY, SESSION, CONTEXT),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     expect(log.statusWrites).toEqual([]);
-    expect(log.events).toEqual([]);
   });
 });

@@ -16,7 +16,6 @@ import {
   CreateReportInput,
   ListReportsQuery,
   MyReportsQuery,
-  PartnerActionInput,
   VerifyClosureInput,
 } from '@hadir/contracts';
 import { ok } from '../../common/http/envelope';
@@ -135,23 +134,4 @@ export class ReportsController {
     return ok(result, requestIdOf(request));
   }
 
-  @Post(':publicId/partner-action')
-  @HttpCode(HttpStatus.OK)
-  @Header('Cache-Control', NO_STORE)
-  @RateLimit(RATE_LIMIT_POLICIES.reportAction)
-  async partnerAction(
-    @Param('publicId') publicId: string,
-    @Body() body: unknown,
-    @Req() request: Request,
-  ) {
-    const input = parseOrThrow(PartnerActionInput, body);
-    const key = idempotencyKeyOf(request);
-    const device = deviceOf(request);
-    const context = contextOf(request);
-    const result = await this.reports.partnerAction(publicId, input, key, device, {
-      requestId: context.requestId,
-      deviceHash: device.hash,
-    });
-    return ok(result, requestIdOf(request));
-  }
 }

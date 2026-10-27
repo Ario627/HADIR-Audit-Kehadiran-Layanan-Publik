@@ -31,6 +31,24 @@ export const RATE_LIMIT_POLICIES = {
     windowMs: 3_600_000,
     scope: 'ip',
   },
+  partnerLogin: {
+    name: 'partner-login',
+    limit: 10,
+    windowMs: 600_000,
+    scope: 'ip',
+  },
+  partnerAction: {
+    name: 'partner-action',
+    limit: 120,
+    windowMs: 3_600_000,
+    scope: 'user',
+  },
+  partnerOtp: {
+    name: 'partner-otp',
+    limit: 5,
+    windowMs: 900_000,
+    scope: 'ip',
+  },
   qrLanding: {
     name: 'qr-landing',
     limit: 60,
