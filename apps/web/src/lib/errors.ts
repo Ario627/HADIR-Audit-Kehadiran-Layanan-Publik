@@ -154,3 +154,6 @@ export function describeError(error: unknown): ErrorMessage {
   }
   return { title: UNKNOWN.title, detail: error.message, action: UNKNOWN.action };
 }
+export function isNotFound(error: unknown): boolean {
+  return isApiError(error) && error.code === 'NOT_FOUND';
+}

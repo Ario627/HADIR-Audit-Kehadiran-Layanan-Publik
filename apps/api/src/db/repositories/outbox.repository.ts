@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
-import type { Database } from '../client';
+import type { Database, Transaction } from '../client';
 import { DATABASE } from '../db.module';
 
 export interface OutboxJob {
@@ -99,6 +99,17 @@ export class OutboxRepository {
       }
     }
     return jobs;
+  }
+
+  async enqueue(
+    executor: Database | Transaction,
+    topic: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    await executor.execute(sql`
+      INSERT INTO outbox (topic, payload)
+      VALUES (${topic}, ${JSON.stringify(payload)}::jsonb)
+    `);
   }
 
   async complete(id: string): Promise<void> {

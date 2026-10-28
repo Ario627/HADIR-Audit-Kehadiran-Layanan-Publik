@@ -54,6 +54,7 @@ function row(overrides: Partial<ReportRow> = {}): ReportRow {
     text: 'Atap halte bocor sejak hujan kemarin malam',
     createdAt: new Date('2026-10-26T10:00:00.000Z'),
     resolvedAt: null,
+    followUpAt: null,
     deviceHash: DEVICE.hash,
     ...overrides,
   };
@@ -73,6 +74,8 @@ interface Overrides {
   lockedDevice?: string;
   participation?: { reporter: boolean; corroborator: boolean };
   corroborationOutcome?: { inserted: boolean; count: number };
+  owned?: ReportRow | null;
+  hadContact?: boolean;
 }
 
 function repositoryDouble(log: CallLog, overrides: Overrides): ReportsRepository {
@@ -96,6 +99,7 @@ function repositoryDouble(log: CallLog, overrides: Overrides): ReportsRepository
       return log.events.length;
     },
     listEvents: async () => [],
+    listEventsVia: async () => [],
     addCorroboration: async () =>
       overrides.corroborationOutcome ?? { inserted: true, count: 1 },
     readCorroborationCount: async () => 0,
@@ -108,6 +112,10 @@ function repositoryDouble(log: CallLog, overrides: Overrides): ReportsRepository
     recordClosure: async () => undefined,
     findReportIdByPublicId: async () => REPORT_ID,
     findByPublicIdForDevice: async () => row(),
+    findOwnedByPublicId: async () => (overrides.owned === undefined ? row() : overrides.owned),
+    findByPublicId: async () => row(),
+    clearContact: async () => ({ hadContact: overrides.hadContact ?? false }),
+    contactCiphertext: async () => null,
     findPublicByPublicId: async () => row({ moderation: 'approved', status: 'submitted' }),
     listPublic: async () => ({ items: [row()], hasMore: false }),
     listForDevice: async () => ({ items: [row()], hasMore: false }),

@@ -35,6 +35,7 @@ export interface ReportRow {
   text: string;
   createdAt: Date;
   resolvedAt: Date | null;
+  followUpAt: Date | null;
   deviceHash: string;
 }
 
@@ -95,6 +96,7 @@ const reportSelection = {
   text: reports.text,
   createdAt: reports.createdAt,
   resolvedAt: reports.resolvedAt,
+  followUpAt: reports.followUpAt,
   deviceHash: reports.deviceHash,
 };
 
@@ -329,6 +331,27 @@ export class ReportsRepository {
     return rows[0] ?? null;
   }
 
+  async findOwnedByPublicId(
+    executor: Database | Transaction,
+    publicId: string,
+    deviceHash: string,
+  ): Promise<ReportRow | null> {
+    const rows = await baseQuery(executor)
+      .where(and(eq(reports.publicId, publicId), eq(reports.deviceHash, deviceHash)))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  async findByPublicId(
+    executor: Database | Transaction,
+    publicId: string,
+  ): Promise<ReportRow | null> {
+    const rows = await baseQuery(executor)
+      .where(eq(reports.publicId, publicId))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
   async findPublicByPublicId(
     executor: Database | Transaction,
     publicId: string,
@@ -389,7 +412,14 @@ export class ReportsRepository {
   }
 
   async listEvents(reportId: string): Promise<EventRecord[]> {
-    const rows = await this.db
+    return this.listEventsVia(this.db, reportId);
+  }
+
+  async listEventsVia(
+    executor: Database | Transaction,
+    reportId: string,
+  ): Promise<EventRecord[]> {
+    const rows = await executor
       .select({
         kind: reportEvents.kind,
         actorType: reportEvents.actorType,
@@ -463,6 +493,86 @@ export class ReportsRepository {
       .update(reports)
       .set({ status, resolvedAt })
       .where(eq(reports.id, reportId));
+  }
+
+  async setFollowUp(
+    tx: Transaction,
+    reportId: string,
+    followUpAt: Date | null,
+  ): Promise<void> {
+    await tx
+      .update(reports)
+      .set({ followUpAt })
+      .where(eq(reports.id, reportId));
+  }
+
+  async clearContact(
+    tx: Transaction,
+    reportId: string,
+  ): Promise<{ hadContact: boolean }> {
+    const result = await tx.execute(
+      sql`SELECT withdraw_report_contact(${reportId}) AS withdrawn`,
+    );
+    const row = (result.rows[0] ?? {}) as Record<string, unknown>;
+    return { hadContact: row.withdrawn === true };
+  }
+
+  async contactCiphertext(
+    tx: Transaction,
+    reportId: string,
+  ): Promise<string | null> {
+    const result = await tx.execute(
+      sql`SELECT report_contact_ciphertext(${reportId}) AS payload`,
+    );
+    const row = (result.rows[0] ?? {}) as Record<string, unknown>;
+    return typeof row.payload === 'string' ? row.payload : null;
+  }
+
+  async listMediaFor(
+    executor: Database | Transaction,
+    reportId: string,
+  ): Promise<
+    { id: string; mime: string; width: number | null; height: number | null; status: string }[]
+  > {
+    const rows = await executor.execute(sql`
+      SELECT id, mime, width, height, status
+      FROM report_media
+      WHERE report_id = ${reportId}
+      ORDER BY created_at ASC
+    `);
+    return rows.rows.map((row) => {
+      const record = row as Record<string, unknown>;
+      return {
+        id: typeof record.id === 'string' ? record.id : '',
+        mime: typeof record.mime === 'string' ? record.mime : 'image/jpeg',
+        width: typeof record.width === 'number' ? record.width : null,
+        height: typeof record.height === 'number' ? record.height : null,
+        status: typeof record.status === 'string' ? record.status : 'pending',
+      };
+    });
+  }
+
+  async findMediaForReport(
+    executor: Database | Transaction,
+    reportId: string,
+    mediaId: string,
+  ): Promise<{ id: string; objectKey: string; mime: string; status: string } | null> {
+    const rows = await executor.execute(sql`
+      SELECT id, object_key, mime, status
+      FROM report_media
+      WHERE report_id = ${reportId} AND id = ${mediaId}
+      LIMIT 1
+    `);
+    const row = rows.rows[0] as Record<string, unknown> | undefined;
+    if (row === undefined) {
+      return null;
+    }
+    return {
+      id: typeof row.id === 'string' ? row.id : '',
+      objectKey: typeof row.object_key === 'string' ? row.object_key : '',
+      mime: typeof row.mime === 'string' ? row.mime : 'image/jpeg',
+      status: typeof row.status === 'string' ? row.status : 'pending',
+    };
   }
 
   async lockReport(

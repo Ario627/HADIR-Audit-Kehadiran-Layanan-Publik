@@ -1,4 +1,4 @@
-import type { ReportDetail, ReportListItem } from '@hadir/contracts';
+import type { PartnerReportDetail, ReportDetail, ReportListItem } from '@hadir/contracts';
 import { AppError } from '../../common/errors/app-error';
 import type { DeviceIdentity } from '../../common/http/request-context';
 import type {
@@ -70,4 +70,31 @@ export function toDetail(row: ReportRow, events: readonly EventRecord[]): Report
 
 export function toPublicDetail(row: ReportRow, events: readonly EventRecord[]): ReportDetail {
   return buildDetail(row, events, false);
+}
+
+export interface PartnerMediaRow {
+  id: string;
+  mime: string;
+  width: number | null;
+  height: number | null;
+  status: string;
+}
+
+export function toPartnerDetail(
+  row: ReportRow,
+  events: readonly EventRecord[],
+  media: readonly PartnerMediaRow[],
+): PartnerReportDetail {
+  return {
+    ...buildDetail(row, events, true),
+    followUpAt: row.followUpAt?.toISOString() ?? null,
+    media: media.map((item) => ({
+      mediaId: item.id,
+      mime: item.mime as PartnerReportDetail['media'][number]['mime'],
+      width: item.width,
+      height: item.height,
+      status: item.status as PartnerReportDetail['media'][number]['status'],
+      url: `/v1/reports/${row.publicId}/media/${item.id}`,
+    })),
+  };
 }

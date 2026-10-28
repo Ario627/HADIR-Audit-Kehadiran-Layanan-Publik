@@ -18,6 +18,6 @@ import { UploadsService } from './uploads.service';
       useFactory: () => new LocalObjectStorage(resolve(env.uploadRoot)),
     },
   ],
-  exports: [UploadsService],
+  exports: [UploadsService, OBJECT_STORAGE],
 })
 export class UploadsModule {}

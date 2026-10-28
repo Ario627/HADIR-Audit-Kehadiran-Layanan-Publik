@@ -4,6 +4,7 @@ import type { UploadRequest, UploadTicket } from '@hadir/contracts';
 import { AuditService } from '../../common/audit/audit.service';
 import { AppError } from '../../common/errors/app-error';
 import { ALLOWED_IMAGE_MIMES, ImageRejected, sniffImage, type ImageMime } from '../../common/media/image-sniff';
+import { sanitizeImage } from '../../common/media/sanitize-image';
 import { OBJECT_STORAGE, objectKeyFor, type ObjectStorage } from '../../common/storage/object-storage';
 import type { Database, Transaction } from '../../db/client';
 import { DATABASE } from '../../db/db.module';
@@ -144,21 +145,41 @@ export class UploadsService {
       });
     }
 
-    const objectKey = objectKeyFor('uploads', bytes, EXTENSION[facts.mime]);
-    const sha256 = createHash('sha256').update(bytes).digest();
-    await this.storage.put({ key: objectKey, bytes });
-    const stored = await this.repository.markStored({
+    const sanitized = sanitizeImage(bytes, facts.mime);
+    const stored = sanitized.bytes;
+    if (stored.length === 0) {
+      await this.repository.markRejected(uploadId, 'sanitize_failed');
+      throw new AppError('UNSUPPORTED_MEDIA_TYPE', {
+        detail: 'Berkas tidak dapat dibersihkan.',
+      });
+    }
+
+    const objectKey = objectKeyFor('uploads', stored, EXTENSION[facts.mime]);
+    const sha256 = createHash('sha256').update(stored).digest();
+    await this.storage.put({ key: objectKey, bytes: stored });
+    const recorded = await this.repository.markStored({
       id: uploadId,
       actualMime: facts.mime,
-      actualSize: bytes.length,
+      actualSize: stored.length,
       width: facts.width,
       height: facts.height,
       sha256,
       objectKey,
       hasExif: facts.hasExif,
     });
-    if (!stored) {
+    if (!recorded) {
       throw new AppError('INVALID_TRANSITION', { detail: 'Unggahan ini sudah dipakai.' });
+    }
+
+    if (sanitized.changed) {
+      await this.audit.record({
+        action: 'report.media_sanitized',
+        objectType: 'system',
+        objectId: uploadId,
+        actor: { kind: 'citizen', deviceHash: context.deviceHash },
+        requestId: context.requestId,
+        payload: { stripped: sanitized.stripped.join(','), bytesBefore: bytes.length },
+      });
     }
 
     await this.audit.record({
@@ -167,7 +188,7 @@ export class UploadsService {
       objectId: uploadId,
       actor: { kind: 'citizen', deviceHash: context.deviceHash },
       requestId: context.requestId,
-      payload: { mime: facts.mime, bytes: bytes.length, hasExif: facts.hasExif },
+      payload: { mime: facts.mime, bytes: stored.length, hasExif: facts.hasExif },
     });
 
     return {

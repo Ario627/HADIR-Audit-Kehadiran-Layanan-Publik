@@ -19,6 +19,7 @@ import { prefetchAll } from '../lib/prefetch';
 import { episodeQuery } from '../lib/queries';
 import { useElapsedSeconds } from '../lib/use-elapsed-seconds';
 import { useOnline } from '../lib/use-online';
+import { useQueuedEnd } from '../lib/use-outbox';
 
 function WaitPage() {
   const { episodeId } = Route.useParams();
@@ -30,37 +31,48 @@ function WaitPage() {
 
   const query = useQuery({ ...episodeQuery(episodeId), enabled: validId });
   const end = useEndEpisode(validId ? episodeId : '');
+  const queued = useQueuedEnd(validId ? episodeId : '');
 
   const snapshot = query.data;
   const episode = snapshot?.episode ?? null;
   const usableStored = stored !== null && stored.episodeId === episodeId ? stored : null;
 
+  const queuedAt = queued === null ? null : Date.parse(queued.body.clientEndedAt);
   const seedMs =
-    episode !== null
-      ? elapsedSeedMs(episode.startedAt, snapshot?.serverNow ?? null)
-      : usableStored !== null
-        ? elapsedSeedMs(usableStored.startedAt, null)
-        : null;
+    queuedAt !== null && episode !== null
+      ? Math.max(0, queuedAt - Date.parse(episode.startedAt))
+      : episode !== null
+        ? elapsedSeedMs(episode.startedAt, snapshot?.serverNow ?? null)
+        : usableStored !== null
+          ? elapsedSeedMs(usableStored.startedAt, null)
+          : null;
 
-  const running = episode === null || episode.status === 'active';
+  const running = queuedAt === null && (episode === null || episode.status === 'active');
   const seconds = useElapsedSeconds(seedMs, running);
 
-  useHeartbeat(episodeId, validId && episode !== null && episode.status === 'active');
+  useHeartbeat(episodeId, validId && episode !== null && episode.status === 'active' && queued === null);
 
   useEffect(() => {
     if (episode === null || episode.status !== 'ended') {
       return;
     }
     clearStoredEpisode();
-    void navigate({ to: '/', replace: true });
-  }, [episode, navigate]);
+    void navigate({
+      to: '/ringkasan/$episodeId',
+      params: { episodeId },
+      replace: true,
+    });
+  }, [episode, episodeId, navigate]);
 
   function finish(outcome: EndOutcome): void {
     end.mutate(outcome, {
-      onSuccess: () => {
+      onSuccess: (result) => {
+        if (result.kind === 'queued') {
+          return;
+        }
         clearStoredEpisode();
         void queryClient.invalidateQueries({ queryKey: ['episode'] });
-        void navigate({ to: '/' });
+        void navigate({ to: '/ringkasan/$episodeId', params: { episodeId } });
       },
     });
   }
@@ -153,7 +165,7 @@ function WaitPage() {
   const endErrorMessage = end.isError ? describeError(end.error) : null;
   const failedOutcome = end.isError ? end.variables : undefined;
   const busyOutcome = end.isPending ? (end.variables ?? null) : null;
-  const disabled = end.isPending || !online;
+  const disabled = end.isPending;
 
   return (
     <>
@@ -162,19 +174,41 @@ function WaitPage() {
         <h1 className="page-title">{view.name}</h1>
       </div>
 
-      <WaitTicket
-        view={view}
-        seconds={seconds}
-        actions={<OutcomeActions busyOutcome={busyOutcome} disabled={disabled} onSelect={finish} />}
-        status={
-          <SyncStatus
-            online={online}
-            phase={phase}
-            source={view.source}
-            {...(failedOutcome === undefined ? {} : { onRetry: () => finish(failedOutcome) })}
-          />
-        }
-      />
+      {queued === null ? (
+        <WaitTicket
+          view={view}
+          seconds={seconds}
+          actions={<OutcomeActions busyOutcome={busyOutcome} disabled={disabled} onSelect={finish} />}
+          status={
+            <SyncStatus
+              online={online}
+              phase={phase}
+              source={view.source}
+              {...(failedOutcome === undefined ? {} : { onRetry: () => finish(failedOutcome) })}
+            />
+          }
+        />
+      ) : (
+        <WaitTicket
+          view={view}
+          seconds={seconds}
+          actions={
+            <p className="ticket-note">
+              Hasil tunggu sudah dicatat di perangkat ini. Angka final tidak akan berubah lagi.
+            </p>
+          }
+          status={
+            <SyncStatus
+              online={online}
+              phase="queued"
+              source="device"
+              onRetry={() => {
+                void import('../lib/outbox-sync').then((mod) => mod.flushOutbox({ force: true }));
+              }}
+            />
+          }
+        />
+      )}
 
       {endErrorMessage === null ? null : (
         <StatePanel tone="error" title={endErrorMessage.title}>
@@ -183,9 +217,11 @@ function WaitPage() {
       )}
 
       <p className="note">
-        {online
-          ? 'Tutup aplikasi tidak menghentikan waktu, tetapi episode tanpa aktivitas ditutup otomatis oleh server.'
-          : 'Tombol hasil aktif lagi setelah koneksi kembali. Waktu tetap berjalan.'}
+        {queued !== null
+          ? 'Kamu boleh menutup halaman ini. Pengiriman berjalan sendiri saat koneksi kembali, dan hasilnya muncul di ringkasan episode.'
+          : online
+            ? 'Tutup aplikasi tidak menghentikan waktu, tetapi episode tanpa aktivitas ditutup otomatis oleh server.'
+            : 'Tanpa koneksi, hasil tunggu tetap disimpan di perangkat dan dikirim otomatis nanti.'}
       </p>
     </>
   );

@@ -1,9 +1,11 @@
+import type { Episode } from '@hadir/contracts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { isApiError } from '../../lib/api';
 import { endEpisode, sendHeartbeat, startEpisode, type StartRequest } from '../../lib/episode-api';
 import type { EndOutcome } from '../../lib/episode';
 import { isUuid, uuidv7 } from '../../lib/id';
+import { isRetryableCode, queueEpisodeEnd } from '../../lib/outbox-queue';
 
 const HEARTBEAT_INTERVAL_MS = 60_000;
 const HEARTBEAT_MIN_GAP_MS = 35_000;
@@ -34,7 +36,9 @@ function attemptFor(holder: { current: Attempt | null }, signature: string): Att
 function startSignature(request: StartRequest): string {
   const route = request.routeId === null ? '' : request.routeId;
   const signature = request.qr === null ? '' : request.qr.signature;
-  return `${request.stopCode}|${route}|${request.startMode}|${signature}`;
+  const distance = request.distanceBucket ?? '';
+  const accuracy = request.accuracyBucket ?? '';
+  return `${request.stopCode}|${route}|${request.startMode}|${signature}|${distance}|${accuracy}`;
 }
 
 export function useStartEpisode() {
@@ -52,17 +56,34 @@ export function useStartEpisode() {
   });
 }
 
+export type EndResult = { kind: 'saved'; episode: Episode } | { kind: 'queued' };
+
 export function useEndEpisode(episodeId: string) {
   const holder = useRef<Attempt | null>(null);
   return useMutation({
-    mutationFn: (outcome: EndOutcome) => {
+    mutationFn: async (outcome: EndOutcome): Promise<EndResult> => {
       const attempt = attemptFor(holder, outcome);
-      return endEpisode(
-        episodeId,
-        outcome,
-        { clientEndedAt: attempt.clientAt, clientEventId: attempt.clientEventId },
-        attempt.idempotencyKey,
-      );
+      try {
+        const episode = await endEpisode(
+          episodeId,
+          outcome,
+          { clientEndedAt: attempt.clientAt, clientEventId: attempt.clientEventId },
+          attempt.idempotencyKey,
+        );
+        return { kind: 'saved', episode };
+      } catch (error) {
+        if (!isApiError(error) || !isRetryableCode(error.code)) {
+          throw error;
+        }
+        await queueEpisodeEnd({
+          episodeId,
+          outcome,
+          clientEndedAt: attempt.clientAt,
+          clientEventId: attempt.clientEventId,
+          idempotencyKey: attempt.idempotencyKey,
+        });
+        return { kind: 'queued' };
+      }
     },
     retry: 0,
   });

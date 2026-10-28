@@ -1,4 +1,4 @@
-export type SyncPhase = 'idle' | 'saving' | 'error' | 'unreachable';
+export type SyncPhase = 'idle' | 'saving' | 'error' | 'unreachable' | 'queued';
 
 export type SyncSource = 'server' | 'device';
 
@@ -12,6 +12,9 @@ export interface SyncStatusProps {
 export function syncMessage(online: boolean, phase: SyncPhase, source: SyncSource): string {
   if (phase === 'saving') {
     return 'Menyimpan ke server…';
+  }
+  if (phase === 'queued') {
+    return 'Hasil tersimpan di perangkat ini. Terkirim otomatis saat koneksi kembali.';
   }
   if (phase === 'error') {
     return 'Gagal menyimpan. Catatan tetap ada di perangkat ini.';
@@ -31,9 +34,9 @@ export function SyncStatus({ online, phase, source, onRetry }: SyncStatusProps) 
       <p className="ticket-status-text" role="status">
         {syncMessage(online, phase, source)}
       </p>
-      {phase === 'error' && onRetry !== undefined ? (
+      {onRetry !== undefined && (phase === 'error' || phase === 'queued') ? (
         <button type="button" className="link-button" onClick={onRetry}>
-          Coba simpan lagi
+          {phase === 'queued' ? 'Kirim sekarang' : 'Coba simpan lagi'}
         </button>
       ) : null}
     </div>

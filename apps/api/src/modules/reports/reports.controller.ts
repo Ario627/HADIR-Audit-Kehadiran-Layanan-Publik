@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Header,
   HttpCode,
@@ -9,13 +10,15 @@ import {
   Post,
   Query,
   Req,
+  Res,
 } from '@nestjs/common';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import {
   CorroborateInput,
   CreateReportInput,
   ListReportsQuery,
   MyReportsQuery,
+  Uuid,
   VerifyClosureInput,
 } from '@hadir/contracts';
 import { ok } from '../../common/http/envelope';
@@ -24,14 +27,19 @@ import { contextOf, deviceOf, requestIdOf } from '../../common/http/request-cont
 import { transactionContextFor } from '../../common/http/transaction-context';
 import { RateLimit, RATE_LIMIT_POLICIES } from '../../common/http/rate-limit.policy';
 import { parseOrThrow } from '../../common/http/zod';
+import { ReportsMediaService } from './reports.media.service';
 import { ReportsService } from './reports.service';
 
 const NO_STORE = 'no-store';
 const PUBLIC_CACHE = 'public, s-maxage=60, stale-while-revalidate=300';
+const MEDIA_CACHE = 'public, max-age=300, stale-while-revalidate=3600';
 
 @Controller('reports')
 export class ReportsController {
-  constructor(private readonly reports: ReportsService) {}
+  constructor(
+    private readonly reports: ReportsService,
+    private readonly media: ReportsMediaService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -63,6 +71,24 @@ export class ReportsController {
     });
   }
 
+  @Get('mine/:publicId/media')
+  @Header('Cache-Control', NO_STORE)
+  @RateLimit(RATE_LIMIT_POLICIES.reportMediaRead)
+  async mineMedia(@Param('publicId') publicId: string, @Req() request: Request) {
+    const items = await this.media.list(publicId, contextOf(request).actor);
+    return ok({ items }, requestIdOf(request));
+  }
+
+  @Delete('mine/:publicId/consent')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', NO_STORE)
+  @RateLimit(RATE_LIMIT_POLICIES.reportAction)
+  async withdrawConsent(@Param('publicId') publicId: string, @Req() request: Request) {
+    const device = deviceOf(request);
+    const result = await this.reports.withdrawConsent(publicId, device, requestIdOf(request));
+    return ok(result, requestIdOf(request));
+  }
+
   @Get('mine/:publicId')
   @Header('Cache-Control', NO_STORE)
   @RateLimit(RATE_LIMIT_POLICIES.deviceRead)
@@ -82,6 +108,35 @@ export class ReportsController {
       nextCursor: result.nextCursor,
       hasMore: result.hasMore,
     });
+  }
+
+  @Get(':publicId/media')
+  @Header('Cache-Control', PUBLIC_CACHE)
+  @RateLimit(RATE_LIMIT_POLICIES.reportMediaRead)
+  async publicMedia(@Param('publicId') publicId: string, @Req() request: Request) {
+    const items = await this.media.list(publicId, contextOf(request).actor);
+    return ok({ items }, requestIdOf(request));
+  }
+
+  @Get(':publicId/media/:mediaId')
+  @Header('Cache-Control', MEDIA_CACHE)
+  @RateLimit(RATE_LIMIT_POLICIES.reportMediaRead)
+  async serveMedia(
+    @Param('publicId') publicId: string,
+    @Param('mediaId') mediaId: string,
+    @Req() request: Request,
+    @Res() response: Response,
+  ): Promise<void> {
+    const id = parseOrThrow(Uuid, mediaId);
+    const object = await this.media.read(publicId, id, contextOf(request).actor);
+    response.setHeader('Content-Type', object.mime);
+    response.setHeader('Content-Length', String(object.bytes.length));
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.setHeader(
+      'Content-Security-Policy',
+      "default-src 'none'; sandbox",
+    );
+    response.status(HttpStatus.OK).end(object.bytes);
   }
 
   @Get(':publicId')
@@ -125,5 +180,4 @@ export class ReportsController {
     const result = await this.reports.verifyClosure(publicId, input, key, device, transactionContextFor(context));
     return ok(result, requestIdOf(request));
   }
-
 }

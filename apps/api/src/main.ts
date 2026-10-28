@@ -62,6 +62,7 @@ async function bootstrap(): Promise<void> {
       'If-None-Match',
       'X-CSRF-Token',
       'X-Request-Id',
+      'X-Upload-Token',
     ],
     exposedHeaders: [
       'ETag',

@@ -69,6 +69,7 @@ export class PartnerPasskeyController {
   @HttpCode(HttpStatus.OK)
   @Header('Cache-Control', NO_STORE)
   @RateLimit(RATE_LIMIT_POLICIES.partnerLogin)
+  @PartnerOnly('viewer')
   async authenticationOptions(@Req() request: Request) {
     const session = partnerSessionOf(request);
     const result = await this.passkeys.beginAuthentication(session.userId);

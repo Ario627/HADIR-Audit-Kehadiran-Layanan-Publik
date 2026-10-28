@@ -6,9 +6,13 @@ import { StatePanel } from '../components/StatePanel';
 import { isApiError } from '../lib/api';
 import type { RouterContext } from '../lib/router-context';
 import { useOnline } from '../lib/use-online';
+import { useOutboxSync } from '../lib/use-outbox';
+import { usePageMeta } from '../lib/use-page-meta';
 
 function RootLayout() {
   const online = useOnline();
+  useOutboxSync();
+  usePageMeta();
   return (
     <>
       <a className="skip-link" href="#main">
@@ -28,6 +32,8 @@ function RootLayout() {
         <p>HADIR · bukti tunggu bus bersubsidi</p>
         <p>
           <Link to="/metodologi">Cara angka ini dihitung</Link>
+          {' · '}
+          <Link to="/transparansi">Anchor harian</Link>
           {' · '}
           <Link to="/privasi">Privasi &amp; data saya</Link>
         </p>

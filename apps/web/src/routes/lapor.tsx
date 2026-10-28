@@ -1,16 +1,17 @@
 import type { ReportCategory } from '@hadir/contracts';
 import { useQuery } from '@tanstack/react-query';
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StatePanel } from '../components/StatePanel';
 import { CategoryPicker } from '../features/triage/CategoryPicker';
 import { VerdictCard } from '../features/triage/VerdictCard';
 import { useTriage } from '../features/triage/use-triage';
 import { StopPicker } from '../features/report/StopPicker';
 import { PhotoInput } from '../features/report/PhotoInput';
+import { DraftBanner, DraftSaved } from '../features/report/DraftBanner';
 import { useCreateReport } from '../features/report/use-report-actions';
-import { describeError } from '../lib/errors';
-import { stopsQuery } from '../lib/queries';
+import { describeError, isNotFound } from '../lib/errors';
+import { stopByCodeQuery } from '../lib/queries';
 import {
   checkReportText,
   readReportCategory,
@@ -20,6 +21,7 @@ import {
 } from '../lib/report';
 import { readStopCode } from '../lib/qr';
 import { prefetchAll } from '../lib/prefetch';
+import { useReportDraft } from '../lib/use-report-draft';
 
 export interface LaporSearch {
   halte?: string;
@@ -46,14 +48,39 @@ function LaporPage() {
   const category = readReportCategory(search.kategori);
   const [text, setText] = useState('');
   const [photoUploadId, setPhotoUploadId] = useState<string | null>(null);
+  const [photoSavedAt, setPhotoSavedAt] = useState<number | null>(null);
   const triage = useTriage();
   const create = useCreateReport();
+  const now = Date.now();
+  const draft = useReportDraft(
+    { text, photoUploadId, photoSavedAt },
+    { stopCode, category },
+    (restoredDraft) => {
+      setText(restoredDraft.text);
+      setPhotoUploadId(restoredDraft.photoUploadId);
+      setPhotoSavedAt(restoredDraft.photoSavedAt);
+      if (restoredDraft.stopCode !== stopCode || restoredDraft.category !== category) {
+        void navigate({
+          to: '/lapor',
+          search: {
+            ...(restoredDraft.stopCode === null ? {} : { halte: restoredDraft.stopCode }),
+            ...(restoredDraft.category === null ? {} : { kategori: restoredDraft.category }),
+          },
+          replace: true,
+        });
+      }
+    },
+  );
+  const { discard } = draft;
 
-  const stop = useQuery({
-    ...stopsQuery({ q: stopCode ?? '', limit: 10 }),
-    enabled: stopCode !== null,
-  });
-  const resolvedStop = stop.data?.items.find((item) => item.code === stopCode) ?? null;
+  useEffect(() => {
+    if (create.data !== undefined) {
+      discard();
+    }
+  }, [create.data, discard]);
+
+  const stop = useQuery(stopByCodeQuery(stopCode));
+  const resolvedStop = stop.data === undefined ? null : stop.data;
   const check = checkReportText(text);
   const canTriage = stopCode !== null && category !== null && check.issue === null;
 
@@ -109,6 +136,16 @@ function LaporPage() {
         </p>
       </div>
 
+      {draft.restored === null ? null : (
+        <DraftBanner
+          draft={draft.restored}
+          saving={draft.saving}
+          savedAt={draft.savedAt}
+          now={now}
+          onDiscard={discard}
+        />
+      )}
+
       {stopCode === null ? (
         <StopPicker
           disabled={triage.isPending}
@@ -138,13 +175,13 @@ function LaporPage() {
         <StatePanel title="Memuat halte">Memastikan halte ini masih aktif.</StatePanel>
       ) : null}
 
-      {stopCode !== null && stop.isError ? (
+      {stopCode !== null && stop.isError && !isNotFound(stop.error) ? (
         <StatePanel tone="error" title="Halte tidak bisa dimuat">
           Periksa koneksi lalu coba lagi.
         </StatePanel>
       ) : null}
 
-      {stopCode !== null && stop.isSuccess && resolvedStop === null ? (
+      {stopCode !== null && isNotFound(stop.error) ? (
         <StatePanel tone="error" title="Halte tidak terdaftar">
           Kode {stopCode} tidak ada di papan bukti. Pilih halte lain.
         </StatePanel>
@@ -217,6 +254,7 @@ function LaporPage() {
             disabled={triage.isPending}
             onUploaded={(photo) => {
               setPhotoUploadId(photo === null ? null : photo.uploadId);
+              setPhotoSavedAt(photo === null ? null : Date.now());
             }}
           />
 
@@ -245,6 +283,8 @@ function LaporPage() {
             </span>
           </div>
 
+          <DraftSaved saving={draft.saving} savedAt={draft.savedAt} now={now} />
+
           {triageError === null ? null : (
             <StatePanel tone="error" title={triageError.title}>
               {triageError.detail}
@@ -272,7 +312,7 @@ export const Route = createFileRoute('/lapor')({
     if (deps.halte === null) {
       return;
     }
-    await prefetchAll(context.queryClient.ensureQueryData(stopsQuery({ q: deps.halte, limit: 10 })));
+    await prefetchAll(context.queryClient.ensureQueryData(stopByCodeQuery(deps.halte)));
   },
   component: LaporPage,
 });

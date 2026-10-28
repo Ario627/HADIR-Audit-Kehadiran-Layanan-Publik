@@ -1,6 +1,7 @@
 import type { PartnerSession } from '../../common/auth/partner-session';
 import type { ReportRow, ReportsRepository } from '../../db/repositories/reports.repository';
 import type { IdempotencyService } from '../../common/idempotency/idempotency.service';
+import type { OutboxRepository } from '../../db/repositories/outbox.repository';
 import { auditStub } from '../../test-support/audit.stub';
 import type { Transaction } from '../../db/client';
 import type { TransactionRunner } from '../../db/transaction-runner';
@@ -64,9 +65,11 @@ function buildService(capture: InboxCapture, items: ReportRow[] = [row('LPR-2026
       return items.find((item) => item.publicId === publicId) ?? null;
     },
     listEventsFor: async () => [],
+    listMediaFor: async () => [],
   } as unknown as ReportsRepository;
   return new PartnerReportsService(
     repository,
+    { enqueue: async () => undefined } as unknown as OutboxRepository,
     {} as IdempotencyService,
     auditStub(),
     passthroughRunner,

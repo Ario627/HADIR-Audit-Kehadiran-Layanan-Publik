@@ -19,6 +19,9 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { RunwayModule } from './modules/runway/runway.module';
 import { PartnerModule } from './modules/partner/partner.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { TransparencyModule } from './modules/transparency/transparency.module';
+import { InternalModule } from './modules/internal/internal.module';
 
 @Module({
   imports: [
@@ -35,6 +38,9 @@ import { UploadsModule } from './modules/uploads/uploads.module';
     RunwayModule,
     PartnerModule,
     UploadsModule,
+    AdminModule,
+    TransparencyModule,
+    InternalModule,
   ],
   controllers: [AppController, HealthController, MetaController],
   providers: [

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { useMemo } from 'react';
 import { StatePanel } from '../components/StatePanel';
 import { BoardLedger } from '../features/board/BoardLedger';
@@ -51,12 +51,27 @@ function BoardPage() {
         </p>
       </div>
 
+      <div className="actions">
+        <Link to="/scan" className="btn">
+          Pindai QR halte
+        </Link>
+        <Link to="/sekitar" className="btn btn--ghost">
+          Cari halte di sekitar
+        </Link>
+      </div>
+
       {failed ? (
         <StatePanel tone="error" title="Papan bukti tidak bisa dimuat">
           Periksa koneksi lalu muat ulang halaman. Data yang sudah pernah dimuat tetap tersedia setelah
           koneksi kembali.
         </StatePanel>
       ) : null}
+
+      <p className="note">
+        Di halte? <Link to="/sekitar">Cari halte di sekitar posisimu</Link> untuk mencatat tanpa memindai
+        stiker. Perangkat hanya mengirim kategori jarak dan akurasi, bukan titik presisi. Sebaran halte
+        ada di <Link to="/peta">peta halte</Link>.
+      </p>
 
       {board === null ? (
         <StatePanel title="Memuat papan bukti">Mengambil daftar halte dan cakupan data.</StatePanel>

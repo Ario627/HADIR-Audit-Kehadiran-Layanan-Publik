@@ -53,6 +53,7 @@ interface ApiErrorOptions {
 const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
 const READ_TIMEOUT_MS = 10_000;
 const WRITE_TIMEOUT_MS = 20_000;
+const DOWNLOAD_TIMEOUT_MS = 60_000;
 const DEVICE_BOOTSTRAP_TIMEOUT_MS = 8_000;
 const DEVICE_BOOTSTRAP_PATH = '/v1/devices';
 
@@ -385,6 +386,18 @@ async function performRequest<T>(
 type ReadOptions = Omit<ApiRequestOptions, 'method' | 'body' | 'idempotencyKey'>;
 type WriteOptions = Omit<ApiRequestOptions, 'method' | 'body'>;
 
+function isReplayable(options: ApiRequestOptions): boolean {
+  const method = options.method ?? 'GET';
+  return method === 'GET' || options.idempotencyKey !== undefined;
+}
+
+function shouldResetDevice(path: string, error: unknown): boolean {
+  if (!isRecoverableSessionError(error)) {
+    return false;
+  }
+  return !path.startsWith('/v1/partner');
+}
+
 export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
@@ -392,7 +405,7 @@ export async function apiRequest<T>(
   try {
     return await performRequest<T>(path, options);
   } catch (error) {
-    if (!isRecoverableSessionError(error)) {
+    if (!isReplayable(options) || !shouldResetDevice(path, error)) {
       throw error;
     }
     resetDevice();
@@ -517,12 +530,50 @@ export async function apiPutBinary<T>(
   try {
     return await performPutBinary<T>(path, body, options);
   } catch (error) {
-    if (!isRecoverableSessionError(error)) {
+    if (!shouldResetDevice(path, error)) {
       throw error;
     }
     resetDevice();
     return performPutBinary<T>(path, body, options);
   }
+}
+
+export async function apiFetchBlob(
+  path: string,
+  options: { timeoutMs?: number; signal?: AbortSignal } = {},
+): Promise<Blob> {
+  const timeout = AbortSignal.timeout(options.timeoutMs ?? DOWNLOAD_TIMEOUT_MS);
+  const signal =
+    options.signal === undefined ? timeout : AbortSignal.any([options.signal, timeout]);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'GET',
+      headers: { Accept: '*/*' },
+      credentials: 'include',
+      signal,
+    });
+  } catch (error) {
+    if (options.signal?.aborted === true) {
+      throw error;
+    }
+    if (error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      throw new ApiError('Unduhan tidak selesai tepat waktu.', {
+        status: 0,
+        code: 'TIMEOUT',
+        cause: error,
+      });
+    }
+    throw new ApiError('Tidak bisa mengunduh berkas. Periksa koneksi.', {
+      status: 0,
+      code: 'NETWORK_ERROR',
+      cause: error,
+    });
+  }
+  if (!response.ok) {
+    throw await toApiError(response);
+  }
+  return response.blob();
 }
 
 export function withQuery(
@@ -537,4 +588,31 @@ export function withQuery(
   }
   const serialized = search.toString();
   return serialized.length === 0 ? path : `${path}?${serialized}`;
+}
+
+function hasUnsafeChars(value: string): boolean {
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code < 0x20 || char === '\\') {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function apiAssetUrl(path: string | null): string | null {
+  if (path === null) {
+    return null;
+  }
+  const trimmed = path.trim();
+  if (trimmed.length === 0 || trimmed.length > 500) {
+    return null;
+  }
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) {
+    return null;
+  }
+  if (hasUnsafeChars(trimmed)) {
+    return null;
+  }
+  return `${API_BASE_URL}${trimmed}`;
 }

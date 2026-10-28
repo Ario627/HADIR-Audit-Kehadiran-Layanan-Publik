@@ -172,7 +172,7 @@ export class ReportsService {
           },
           { type: 'citizen', deviceHash: device.hash },
         );
-        const events = await this.repository.listEvents(report.id);
+        const events = await this.repository.listEventsVia(tx, report.id);
         return { status: 201, body: { report: toDetail(report, events), warnings } };
       },
       context,
@@ -268,12 +268,73 @@ export class ReportsService {
 
   async mineDetail(publicId: string, device: DeviceIdentity): Promise<ReportDetail> {
     assertDevice(device);
-    const report = await this.repository.findByPublicIdForDevice(publicId, device.hash);
-    if (report === null) {
+    const loaded = await this.run(
+      async (tx) => {
+        const report = await this.repository.findOwnedByPublicId(tx, publicId, device.hash);
+        if (report === null) {
+          return null;
+        }
+        const events = await this.repository.listEventsVia(tx, report.id);
+        return { report, events };
+      },
+      {
+        deviceHash: device.hash,
+        requestId: `mine-${device.hash.slice(0, 8)}`,
+      },
+    );
+    if (loaded === null) {
       throw new AppError('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
     }
-    const events = await this.repository.listEvents(report.id);
-    return toDetail(report, events);
+    return toDetail(loaded.report, loaded.events);
+  }
+
+  async withdrawConsent(
+    publicId: string,
+    device: DeviceIdentity,
+    requestId: string,
+  ): Promise<{ publicId: string; withdrawn: boolean; alreadyWithdrawn: boolean }> {
+    assertDevice(device);
+    const outcome = await this.run(
+      async (tx) => {
+        const report = await this.repository.findOwnedByPublicId(tx, publicId, device.hash);
+        if (report === null) {
+          return null;
+        }
+        const cleared = await this.repository.clearContact(tx, report.id);
+        if (cleared.hadContact) {
+          await this.recordEvent(
+            tx,
+            report.id,
+            'corrected',
+            { field: 'contact_email', withdrawn: true },
+            { type: 'citizen', deviceHash: device.hash },
+          );
+        }
+        return { hadContact: cleared.hadContact };
+      },
+      { deviceHash: device.hash, requestId },
+    );
+
+    if (outcome === null) {
+      throw new AppError('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
+    }
+
+    if (outcome.hadContact) {
+      await this.audit.record({
+        action: 'report.contact_withdrawn',
+        objectType: 'report',
+        objectId: publicId,
+        actor: { kind: 'citizen', deviceHash: device.hash },
+        requestId,
+        payload: {},
+      });
+    }
+
+    return {
+      publicId,
+      withdrawn: outcome.hadContact,
+      alreadyWithdrawn: !outcome.hadContact,
+    };
   }
 
   async corroborate(

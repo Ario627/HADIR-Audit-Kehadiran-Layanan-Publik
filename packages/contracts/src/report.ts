@@ -131,6 +131,7 @@ export const PartnerActionInput = z
     action: PartnerAction,
     note: z.string().trim().max(500).optional(),
     reason: z.string().trim().max(200).optional(),
+    scheduledFor: IsoDateTime.nullable().optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -148,12 +149,27 @@ export const PartnerActionInput = z
         message: 'Klaim selesai wajib menyertakan keterangan bukti minimal 10 karakter.',
       });
     }
+    if (value.action === 'schedule' && value.scheduledFor === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['scheduledFor'],
+        message: 'Aksi schedule wajib menyertakan scheduledFor.',
+      });
+    }
+    if (value.action !== 'schedule' && value.scheduledFor != null) {
+      context.addIssue({
+        code: 'custom',
+        path: ['scheduledFor'],
+        message: 'scheduledFor hanya berlaku untuk aksi schedule.',
+      });
+    }
   });
 
 export const PartnerActionResult = z.object({
   publicId: z.string().min(6).max(40),
   status: ReportStatus,
   previousStatus: ReportStatus,
+  scheduledFor: IsoDateTime.nullable(),
   simulated: z.boolean(),
 });
 
@@ -171,6 +187,32 @@ export const VerifyClosureInput = z
     clientEventId: UuidV7,
   })
   .strict();
+
+export const ConsentWithdrawal = z
+  .object({
+    contactEmail: z.email().max(254).nullable().optional(),
+  })
+  .strict();
+
+export type ConsentWithdrawal = z.infer<typeof ConsentWithdrawal>;
+
+export const ConsentWithdrawalResult = z.object({
+  publicId: z.string().min(6).max(40),
+  withdrawn: z.boolean(),
+  alreadyWithdrawn: z.boolean(),
+});
+
+export type ConsentWithdrawalResult = z.infer<typeof ConsentWithdrawalResult>;
+
+export const ReportMediaItem = z.object({
+  mediaId: Uuid,
+  mime: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  url: z.string().min(1).max(500),
+});
+
+export type ReportMediaItem = z.infer<typeof ReportMediaItem>;
 
 export type CreateReportInput = z.infer<typeof CreateReportInput>;
 export type Report = z.infer<typeof Report>;

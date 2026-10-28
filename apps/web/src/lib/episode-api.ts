@@ -1,4 +1,6 @@
 import type {
+  AccuracyBucket,
+  DistanceBucket,
   EndEpisodeInput,
   Episode,
   EpisodeOutcome,
@@ -165,6 +167,8 @@ export interface StartRequest {
   routeId: string | null;
   startMode: StartMode;
   qr: QrProof | null;
+  distanceBucket: DistanceBucket | null;
+  accuracyBucket: AccuracyBucket | null;
 }
 
 export interface StartAttempt {
@@ -184,6 +188,8 @@ export async function startEpisode(
     clientStartedAt: attempt.clientStartedAt,
     clientEventId: attempt.clientEventId,
     ...(request.qr === null ? {} : { qr: request.qr }),
+    ...(request.distanceBucket === null ? {} : { distanceBucket: request.distanceBucket }),
+    ...(request.accuracyBucket === null ? {} : { accuracyBucket: request.accuracyBucket }),
   };
   const envelope = await apiSendChecked(EPISODE_PATH, episodeSchema, {
     method: 'POST',

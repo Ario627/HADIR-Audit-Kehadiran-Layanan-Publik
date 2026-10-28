@@ -47,6 +47,7 @@ CREATE TABLE reports (
   evidence_level evidence_level NOT NULL DEFAULT 'none',
   corroboration_count integer NOT NULL DEFAULT 0,
   resolved_at timestamp with time zone,
+  follow_up_at timestamp with time zone,
   created_at timestamp with time zone NOT NULL DEFAULT now()
 );
 

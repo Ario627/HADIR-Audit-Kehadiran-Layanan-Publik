@@ -62,6 +62,7 @@ CREATE TABLE reports (
   evidence_level evidence_level NOT NULL DEFAULT 'none',
   corroboration_count integer NOT NULL DEFAULT 0,
   resolved_at timestamp with time zone,
+  follow_up_at timestamp with time zone,
   created_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
@@ -207,3 +208,62 @@ GRANT SELECT, INSERT, DELETE ON partner_webauthn_challenges TO hadir_app;
 GRANT SELECT, INSERT, UPDATE (response_status, response_body) ON idempotency_keys TO hadir_app;
 GRANT SELECT ON audit_log TO hadir_app;
 GRANT INSERT (actor_type, actor_id, action, object_type, object_id, request_id, ip_hash, payload) ON audit_log TO hadir_app;
+ALTER TABLE reports
+  ADD COLUMN contact_email_enc bytea,
+  ADD COLUMN contact_email_hash bytea;
+
+CREATE TABLE report_media (
+  id uuid PRIMARY KEY DEFAULT uuidv7(),
+  report_id uuid NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+  object_key text NOT NULL UNIQUE,
+  mime text NOT NULL,
+  width integer,
+  height integer,
+  sha256 bytea,
+  status text NOT NULL DEFAULT 'pending',
+  created_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE TABLE outbox (
+  id uuid PRIMARY KEY DEFAULT uuidv7(),
+  topic text NOT NULL,
+  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  processed_at timestamp with time zone,
+  attempts integer NOT NULL DEFAULT 0,
+  available_at timestamp with time zone NOT NULL DEFAULT now(),
+  last_error text
+);
+
+CREATE OR REPLACE FUNCTION report_contact_ciphertext(p_report_id uuid)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  payload bytea;
+BEGIN
+  SELECT contact_email_enc INTO payload
+  FROM reports
+  WHERE id = p_report_id
+    AND contact_email_enc IS NOT NULL
+    AND (
+      current_setting('app.scope', true) = 'admin'
+      OR (
+        current_setting('app.scope', true) = 'partner'
+        AND COALESCE(current_setting('app.institution_id', true), '') <> ''
+        AND institution_id::text = current_setting('app.institution_id', true)
+      )
+    );
+
+  IF payload IS NULL THEN
+    RETURN NULL;
+  END IF;
+  RETURN encode(payload, 'base64');
+END;
+$$;
+
+GRANT SELECT, INSERT ON report_media TO hadir_app;
+GRANT INSERT ON outbox TO hadir_app;
+GRANT EXECUTE ON FUNCTION report_contact_ciphertext(uuid) TO hadir_app;

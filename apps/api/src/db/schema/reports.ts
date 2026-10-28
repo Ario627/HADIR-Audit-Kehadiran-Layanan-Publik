@@ -49,6 +49,7 @@ export const reports = pgTable(
     contactEmailHash: bytea('contact_email_hash'),
     corroborationCount: integer('corroboration_count').notNull().default(0),
     resolvedAt: timestamp('resolved_at', { withTimezone: true, mode: 'date' }),
+    followUpAt: timestamp('follow_up_at', { withTimezone: true, mode: 'date' }),
     ...timestamps(),
   },
   (table) => [
@@ -59,6 +60,9 @@ export const reports = pgTable(
       table.status,
       table.createdAt.desc(),
     ),
+    index('ix_reports_follow_up')
+      .on(table.institutionId, table.followUpAt)
+      .where(sql`${table.followUpAt} IS NOT NULL`),
     index('ix_reports_stop').on(table.stopId, table.createdAt.desc()),
     index('ix_reports_text_trgm').using('gin', sql`${table.text} gin_trgm_ops`),
     index('ix_reports_moderation').on(table.moderation, table.createdAt.desc()),

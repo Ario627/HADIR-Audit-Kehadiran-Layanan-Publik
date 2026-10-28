@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Pool } from 'pg';
 import request from 'supertest';
@@ -8,7 +9,7 @@ import { signInvite } from '../src/common/auth/invite-token';
 const BOUNDARY_URL = process.env.HADIR_BOUNDARY_DATABASE_URL;
 const IF_PRESENT = BOUNDARY_URL === undefined ? describe.skip : describe;
 
-const HERE = __dirname;
+const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = resolve(HERE, 'fixtures/partner-app.sql');
 const RLS = resolve(HERE, '../src/db/migrations/0017_read_scopes.sql');
 
@@ -107,14 +108,14 @@ IF_PRESENT('partner HTTP boundary', () => {
       [DISHUB_REPORT, POLRES_REPORT, STOP, DISHUB, POLRES],
     );
 
-    const { AppModule } = await import('../src/app.module.js');
+    const { AppModule } = await import('../src/app.module');
     const { Test } = await import('@nestjs/testing');
     const { default: cookieParser } = await import('cookie-parser');
-    const { deviceMiddleware } = await import('../src/common/http/device.middleware.js');
-    const { ProblemDetailsFilter } = await import('../src/common/http/problem-details.filter.js');
-    const { requestIdMiddleware } = await import('../src/common/http/request-id.middleware.js');
-    const { csrfMiddleware } = await import('../src/common/security/csrf.js');
-    const { RATE_LIMIT_STORE } = await import('../src/common/http/rate-limit.store.js');
+    const { deviceMiddleware } = await import('../src/common/http/device.middleware');
+    const { ProblemDetailsFilter } = await import('../src/common/http/problem-details.filter');
+    const { requestIdMiddleware } = await import('../src/common/http/request-id.middleware');
+    const { csrfMiddleware } = await import('../src/common/security/csrf');
+    const { RATE_LIMIT_STORE } = await import('../src/common/http/rate-limit.store');
 
     const moduleFixture = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(RATE_LIMIT_STORE)

@@ -10,5 +10,8 @@ export function transactionContextFor(context: RequestContext): TransactionConte
   if (actor.kind === 'citizen') {
     return { ...base, deviceHash: actor.deviceHash };
   }
+  if (actor.kind === 'moderator' || actor.kind === 'superadmin') {
+    return { ...base, userId: actor.userId, scope: 'admin' };
+  }
   return { ...base, userId: actor.userId, institutionId: actor.institutionId };
 }

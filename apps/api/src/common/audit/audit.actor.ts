@@ -16,5 +16,8 @@ export function toAuditActor(actor: Actor | null): AuditActor {
   if (actor.kind === 'citizen') {
     return { actorType: 'citizen', actorId: actor.deviceHash };
   }
+  if (actor.kind === 'moderator' || actor.kind === 'superadmin') {
+    return { actorType: actor.kind, actorId: actor.userId };
+  }
   return { actorType: 'partner', actorId: actor.userId };
 }

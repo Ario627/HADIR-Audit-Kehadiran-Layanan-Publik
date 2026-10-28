@@ -3,7 +3,7 @@ import type {
   PartnerActionInput,
   PartnerActionResult,
   PartnerInboxQuery,
-  ReportDetail,
+  PartnerReportDetail,
 } from '@hadir/contracts';
 import { AuditService } from '../../common/audit/audit.service';
 import type { PartnerSession } from '../../common/auth/partner-session';
@@ -13,9 +13,10 @@ import type { IdempotencyContext } from '../../common/idempotency/idempotency.se
 import { IdempotencyService } from '../../common/idempotency/idempotency.service';
 import type { Transaction } from '../../db/client';
 import { TRANSACTION_RUNNER, type TransactionRunner } from '../../db/transaction-runner';
+import { OutboxRepository } from '../../db/repositories/outbox.repository';
 import { ReportsRepository, type StoredEventKind } from '../../db/repositories/reports.repository';
 import { nextCursorOf, parseCursor } from '../reports/reports.cursor';
-import { toDetail, type ReportListResult } from '../reports/reports.mapper';
+import { toPartnerDetail, type ReportListResult } from '../reports/reports.mapper';
 import {
   allowedPartnerActions,
   eventKindForAction,
@@ -30,6 +31,7 @@ const IDEMPOTENCY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export class PartnerReportsService {
   constructor(
     private readonly repository: ReportsRepository,
+    private readonly outbox: OutboxRepository,
     private readonly idempotency: IdempotencyService,
     private readonly audit: AuditService,
     @Inject(TRANSACTION_RUNNER) private readonly run: TransactionRunner,
@@ -86,7 +88,10 @@ export class PartnerReportsService {
     };
   }
 
-  async inboxDetail(publicId: string, session: PartnerSession): Promise<ReportDetail> {
+  async inboxDetail(
+    publicId: string,
+    session: PartnerSession,
+  ): Promise<PartnerReportDetail> {
     const loaded = await this.run(
       async (tx) => {
         const report = await this.repository.findInInstitution(
@@ -98,7 +103,8 @@ export class PartnerReportsService {
           return null;
         }
         const events = await this.repository.listEventsFor(tx, report.id);
-        return { report, events };
+        const media = await this.repository.listMediaFor(tx, report.id);
+        return { report, events, media };
       },
       {
         userId: session.userId,
@@ -109,7 +115,7 @@ export class PartnerReportsService {
     if (loaded === null) {
       throw new AppError('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
     }
-    return toDetail(loaded.report, loaded.events);
+    return toPartnerDetail(loaded.report, loaded.events, loaded.media);
   }
 
   async act(
@@ -123,6 +129,22 @@ export class PartnerReportsService {
     const note = sanitizeNote(input.note);
     const reason = sanitizeNote(input.reason);
     const institutionId = session.institutionId;
+    const scheduledFor =
+      input.action === 'schedule' && input.scheduledFor != null
+        ? new Date(input.scheduledFor)
+        : null;
+    if (scheduledFor !== null && scheduledFor.getTime() < Date.now() - 60_000) {
+      throw new AppError('VALIDATION_FAILED', {
+        detail: 'Jadwal tindak lanjut tidak boleh di masa lalu.',
+        errors: [
+          {
+            field: 'scheduledFor',
+            code: 'in_past',
+            message: 'Pilih waktu setelah sekarang.',
+          },
+        ],
+      });
+    }
 
     const result = await this.idempotency.execute(
       {
@@ -133,6 +155,7 @@ export class PartnerReportsService {
           action: input.action,
           note,
           reason,
+          scheduledFor: scheduledFor === null ? null : scheduledFor.toISOString(),
           institutionId,
         }),
         ttlMs: IDEMPOTENCY_TTL_MS,
@@ -164,6 +187,9 @@ export class PartnerReportsService {
           });
         }
         await this.repository.updateStatus(tx, reportId, target, null);
+        if (scheduledFor !== null) {
+          await this.repository.setFollowUp(tx, reportId, scheduledFor);
+        }
         await this.recordEvent(
           tx,
           reportId,
@@ -174,15 +200,27 @@ export class PartnerReportsService {
             to: target,
             hasNote: note !== null,
             hasReason: reason !== null,
+            scheduledFor: scheduledFor === null ? null : scheduledFor.toISOString(),
           },
           session,
         );
+        const contactCiphertext = await this.repository.contactCiphertext(tx, reportId);
+        if (contactCiphertext !== null) {
+          await this.outbox.enqueue(tx, 'report.notify', {
+            reportPublicId: publicId,
+            action: input.action,
+            status: target,
+            scheduledFor: scheduledFor === null ? null : scheduledFor.toISOString(),
+            contactCiphertext,
+          });
+        }
         return {
           status: 200,
           body: {
             publicId,
             status: target,
             previousStatus: locked.status,
+            scheduledFor: scheduledFor === null ? null : scheduledFor.toISOString(),
             simulated: false,
           },
         };
@@ -206,6 +244,7 @@ export class PartnerReportsService {
         partnerAction: input.action,
         from: settled.previousStatus,
         to: settled.status,
+        scheduled: scheduledFor !== null,
       },
     });
     return settled;

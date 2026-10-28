@@ -6,12 +6,13 @@ import { StatePanel } from '../components/StatePanel';
 import { EstimateBlock } from '../features/estimate/EstimateBlock';
 import { StopLead } from '../features/stop/StopLead';
 import { useStartEpisode } from '../features/wait/use-episode-actions';
+import { isApiError } from '../lib/api';
 import { describeError } from '../lib/errors';
 import { readEstimateWindow, windowLabel, type EstimateWindow } from '../lib/estimate';
 import { writeStoredEpisode } from '../lib/episode-storage';
 import { prefetchAll } from '../lib/prefetch';
 import { readQrProof, readQrSearch, readStopCode, type QrSearchInput } from '../lib/qr';
-import { activeEpisodeQuery, estimateQuery, qrLandingQuery, stopsQuery } from '../lib/queries';
+import { activeEpisodeQuery, estimateQuery, qrLandingQuery, stopByCodeQuery } from '../lib/queries';
 
 function EstimateSection({
   stopId,
@@ -99,7 +100,7 @@ function QrLandingPage() {
     enabled: code !== null && proof !== null,
   });
   const fallback = useQuery({
-    ...stopsQuery({ q: code ?? '', limit: 10 }),
+    ...stopByCodeQuery(code),
     enabled: code !== null,
   });
   const start = useStartEpisode();
@@ -151,14 +152,14 @@ function QrLandingPage() {
     return <StatePanel title="Memeriksa QR">Mencocokkan tanda tangan QR dengan halte ini.</StatePanel>;
   }
 
-  const fallbackStop = fallback.data?.items.find((item) => item.code === code) ?? null;
+  const fallbackStop = fallback.data ?? null;
   const stop = landing.data?.stop ?? fallbackStop;
 
   if (stop === null) {
     if (fallback.isPending) {
       return <StatePanel title="Mencari halte">Mengambil data halte {code}.</StatePanel>;
     }
-    if (fallback.isError) {
+    if (fallback.isError && !(isApiError(fallback.error) && fallback.error.code === 'NOT_FOUND')) {
       const message = describeError(fallback.error);
       return (
         <>
@@ -208,7 +209,14 @@ function QrLandingPage() {
       return;
     }
     start.mutate(
-      { stopCode: stop.code, routeId, startMode, qr: verified ? proof : null },
+      {
+        stopCode: stop.code,
+        routeId,
+        startMode,
+        qr: verified ? proof : null,
+        distanceBucket: null,
+        accuracyBucket: null,
+      },
       {
         onSuccess: (episode) => {
           writeStoredEpisode({
@@ -311,15 +319,11 @@ export const Route = createFileRoute('/s/$stopCode')({
       await prefetchAll(active, landing, estimate);
       return;
     }
-    const stops = context.queryClient.ensureQueryData(stopsQuery({ q: code, limit: 10 }));
+    const stops = context.queryClient.ensureQueryData(stopByCodeQuery(code));
     const estimate = (async () => {
       const data = await stops;
-      const stop = data.items.find((item) => item.code === code);
-      if (stop === undefined) {
-        return;
-      }
       await context.queryClient.ensureQueryData(
-        estimateQuery(stop.id, readEstimateWindow(deps.w), null),
+        estimateQuery(data.id, readEstimateWindow(deps.w), null),
       );
     })();
     await prefetchAll(active, stops, estimate);

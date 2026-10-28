@@ -18,6 +18,7 @@
     "@fontsource/ibm-plex-mono": "5.3.0",
     "@hadir/contracts": "workspace:*",
     "@hadir/domain": "workspace:*",
+    "@simplewebauthn/browser": "14.0.0",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
     "react": "catalog:",

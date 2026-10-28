@@ -10,6 +10,7 @@ import type {
   ReportsRepository,
   StoredReportStatus,
 } from '../../db/repositories/reports.repository';
+import type { OutboxRepository } from '../../db/repositories/outbox.repository';
 import {
   allowedPartnerActions,
   eventKindForAction,
@@ -54,6 +55,17 @@ const ALL_STATUSES: readonly StoredReportStatus[] = [
 interface CallLog {
   statusWrites: { status: StoredReportStatus; resolvedAt: Date | null }[];
   events: { kind: string; actorType: string; payload: Record<string, unknown> }[];
+  follows: (Date | null)[];
+  jobs: { topic: string; payload: Record<string, unknown> }[];
+  contactCiphertext: string | null;
+}
+
+function outboxDouble(log: CallLog): OutboxRepository {
+  return {
+    enqueue: async (_tx: unknown, topic: string, payload: Record<string, unknown>) => {
+      log.jobs.push({ topic, payload });
+    },
+  } as unknown as OutboxRepository;
 }
 
 function repositoryDouble(status: StoredReportStatus, log: CallLog): ReportsRepository {
@@ -80,11 +92,21 @@ function repositoryDouble(status: StoredReportStatus, log: CallLog): ReportsRepo
       });
       return log.events.length;
     },
+    contactCiphertext: async () => log.contactCiphertext,
+    setFollowUp: async (_tx: unknown, _id: string, next: Date | null) => {
+      log.follows.push(next);
+    },
   } as unknown as ReportsRepository;
 }
 
 function buildService(status: StoredReportStatus): { service: PartnerReportsService; log: CallLog } {
-  const log: CallLog = { statusWrites: [], events: [] };
+  const log: CallLog = {
+    statusWrites: [],
+    events: [],
+    follows: [],
+    jobs: [],
+    contactCiphertext: null,
+  };
   const idempotency = {
     execute: async (
       _input: unknown,
@@ -97,6 +119,7 @@ function buildService(status: StoredReportStatus): { service: PartnerReportsServ
   return {
     service: new PartnerReportsService(
       repositoryDouble(status, log),
+      outboxDouble(log),
       idempotency,
       auditStub(),
       passthroughRunner,
@@ -251,7 +274,13 @@ describe('PartnerReportsService.act', () => {
   });
 
   it('refuses a report that belongs to another institution', async () => {
-    const log: CallLog = { statusWrites: [], events: [] };
+    const log: CallLog = {
+      statusWrites: [],
+      events: [],
+      follows: [],
+      jobs: [],
+      contactCiphertext: null,
+    };
     const idempotency = {
       execute: async (
         _input: unknown,
@@ -267,7 +296,19 @@ describe('PartnerReportsService.act', () => {
       updateStatus: async () => undefined,
       appendEvent: async () => 1,
     } as unknown as ReportsRepository;
-    const service = new PartnerReportsService(repository, idempotency, auditStub(), passthroughRunner);
+    const service = new PartnerReportsService(
+    repository,
+    outboxDouble({
+      statusWrites: [],
+      events: [],
+      follows: [],
+      jobs: [],
+      contactCiphertext: null,
+    }),
+    idempotency,
+    auditStub(),
+    passthroughRunner,
+  );
 
     await expect(
       service.act(PUBLIC_ID, { action: 'acknowledge' }, KEY, SESSION, CONTEXT),

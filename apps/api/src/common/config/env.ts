@@ -30,6 +30,11 @@ const EnvSchema = z.object({
   PARTNER_SESSION_FRESH_MINUTES: z.coerce.number().int().min(1).max(240).default(30),
   WEBAUTHN_RP_ID: z.string().min(1).max(253).default('localhost'),
   WEBAUTHN_ORIGINS: z.string().min(1).default('http://localhost:5173'),
+  ADMIN_SESSION_IDLE_MINUTES: z.coerce.number().int().min(5).max(240).default(20),
+  ADMIN_SESSION_ABSOLUTE_HOURS: z.coerce.number().int().min(1).max(24).default(8),
+  ADMIN_COOKIE_NAME: z.string().min(1).max(64).optional(),
+  INTERNAL_SHARED_SECRET: z.string().min(16).max(512).optional(),
+  METRICS_ENABLED: z.enum(['true', 'false']).default('true'),
   DATABASE_URL: DatabaseUrl.default('postgres://hadir:hadir@localhost:5432/hadir'),
   REDIS_URL: z.string().min(1).default(DEV_REDIS_URL),
   QR_KEYRING_JSON: z.string().optional(),
@@ -155,6 +160,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
   if (value.NODE_ENV === 'production' && value.DB_SSL_MODE !== 'verify-full') {
     throw new Error('DB_SSL_MODE wajib verify-full di production.');
   }
+  if (value.NODE_ENV === 'production' && (value.INTERNAL_SHARED_SECRET ?? '').length < 32) {
+    throw new Error('INTERNAL_SHARED_SECRET wajib minimal 32 karakter di production.');
+  }
 
   const isProduction = value.NODE_ENV === 'production';
 
@@ -166,6 +174,13 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
     webOrigins,
     deviceCookieName: isProduction ? '__Host-hadir_device' : 'hadir_device',
     partnerSessionCookieName: isProduction ? '__Host-hadir_session' : 'hadir_session',
+    adminSessionCookieName:
+      value.ADMIN_COOKIE_NAME?.trim() ||
+      (isProduction ? '__Host-hadir_admin' : 'hadir_admin'),
+    adminSessionIdleMs: value.ADMIN_SESSION_IDLE_MINUTES * 60_000,
+    adminSessionAbsoluteMs: value.ADMIN_SESSION_ABSOLUTE_HOURS * 3_600_000,
+    internalSharedSecret: value.INTERNAL_SHARED_SECRET?.trim() || null,
+    metricsEnabled: value.METRICS_ENABLED === 'true',
     partnerSessionIdleHours: value.PARTNER_SESSION_IDLE_HOURS,
     partnerSessionAbsoluteDays: value.PARTNER_SESSION_ABSOLUTE_DAYS,
     partnerSessionFreshMinutes: value.PARTNER_SESSION_FRESH_MINUTES,

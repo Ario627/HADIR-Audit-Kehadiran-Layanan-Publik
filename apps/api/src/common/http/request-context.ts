@@ -2,9 +2,13 @@ import type { Request } from 'express';
 
 export type PartnerRole = 'viewer' | 'responder' | 'admin';
 
+export type PlatformAdminRole = 'moderator' | 'superadmin';
+
 export type Actor =
   | { kind: 'citizen'; deviceHash: string }
-  | { kind: 'partner'; userId: string; institutionId: string; role: PartnerRole };
+  | { kind: 'partner'; userId: string; institutionId: string; role: PartnerRole }
+  | { kind: 'moderator'; userId: string }
+  | { kind: 'superadmin'; userId: string };
 
 export interface DeviceIdentity {
   hash: string;

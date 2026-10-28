@@ -169,6 +169,42 @@ export const RATE_LIMIT_POLICIES = {
     windowMs: 3_600_000,
     scope: 'user',
   },
+  transparencyRead: {
+    name: 'transparency-read',
+    limit: 60,
+    windowMs: 60_000,
+    scope: 'ip',
+  },
+  adminMutation: {
+    name: 'admin-mutation',
+    limit: 30,
+    windowMs: 60_000,
+    scope: 'user',
+  },
+  adminRead: {
+    name: 'admin-read',
+    limit: 240,
+    windowMs: 60_000,
+    scope: 'user',
+  },
+  adminLogin: {
+    name: 'admin-login',
+    limit: 5,
+    windowMs: 900_000,
+    scope: 'ip',
+  },
+  reportMediaRead: {
+    name: 'report-media-read',
+    limit: 240,
+    windowMs: 60_000,
+    scope: 'ip',
+  },
+  internalEstimate: {
+    name: 'internal-estimate',
+    limit: 60,
+    windowMs: 60_000,
+    scope: 'ip',
+  },
   authOtp: {
     name: 'auth-otp',
     limit: 5,

@@ -1,7 +1,10 @@
 import { Logger } from '@nestjs/common';
+import { contactCipherFromEnv } from '../common/crypto/contact-key';
+import { LogNotificationDelivery } from '../common/notify/notification-delivery';
 import { closeDatabase, db } from '../db/client';
 import { OutboxRepository } from '../db/repositories/outbox.repository';
-import { OutboxWorker, createWorkerOptions } from './outbox.worker';
+import { OutboxWorker, createWorkerOptions, type JobHandler } from './outbox.worker';
+import { REPORT_NOTIFY_TOPIC, createReportNotifyHandler } from './report-notify.handler';
 
 const POLL_ENV = Number(process.env.OUTBOX_POLL_MS);
 const BATCH_ENV = Number(process.env.OUTBOX_BATCH_SIZE);
@@ -13,7 +16,19 @@ async function main(): Promise<void> {
     ...(Number.isFinite(POLL_ENV) && POLL_ENV > 0 ? { pollIntervalMs: POLL_ENV } : {}),
     ...(Number.isFinite(BATCH_ENV) && BATCH_ENV > 0 ? { batchSize: BATCH_ENV } : {}),
   });
-  const worker = new OutboxWorker(repository, new Map(), options);
+  const worker = new OutboxWorker(
+    repository,
+    new Map<string, JobHandler>([
+      [
+        REPORT_NOTIFY_TOPIC,
+        createReportNotifyHandler(
+          new LogNotificationDelivery(),
+          contactCipherFromEnv().key,
+        ),
+      ],
+    ]),
+    options,
+  );
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.log(`Menerima ${signal}; menghentikan worker.`);
@@ -26,7 +41,7 @@ async function main(): Promise<void> {
   process.on('SIGINT', () => void shutdown('SIGINT'));
 
   logger.log(
-    `Outbox worker berjalan: batch ${options.batchSize}, poll ${options.pollIntervalMs}ms, lease ${options.leaseSeconds}s`,
+    `Outbox worker berjalan: batch ${options.batchSize}, poll ${options.pollIntervalMs}ms, lease ${options.leaseSeconds}s, topic ${REPORT_NOTIFY_TOPIC}`,
   );
   await worker.start();
   await new Promise(() => undefined);

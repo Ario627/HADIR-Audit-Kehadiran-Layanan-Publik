@@ -7,7 +7,7 @@ import * as schema from './schema';
 
 export type Database = NodePgDatabase<typeof schema>;
 
-export type ReadScope = 'none' | 'public' | 'citizen' | 'partner';
+export type ReadScope = 'none' | 'public' | 'citizen' | 'partner' | 'admin';
 
 export interface TransactionContext {
   requestId?: string;

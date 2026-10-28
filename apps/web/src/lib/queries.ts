@@ -6,7 +6,9 @@ import type {
   ReportListItem,
   RouteStopList,
   Runway,
+  StopDetail,
   StopSummary,
+  TransparencyAnchor,
 } from '@hadir/contracts';
 import { queryOptions } from '@tanstack/react-query';
 import { apiGetChecked, apiSendChecked, withQuery } from './api';
@@ -26,7 +28,9 @@ import {
   routeStopListSchema,
   runwayListSchema,
   runwaySchema,
+  stopDetailSchema,
   stopListSchema,
+  transparencyAnchorSchema,
 } from './guards';
 import { fetchReport, reportQueryKey } from './report-api';
 import { readQrProof, type QrSearchInput } from './qr';
@@ -34,6 +38,7 @@ import { readQrProof, type QrSearchInput } from './qr';
 export interface StopListInput {
   q: string;
   limit: number;
+  bbox?: string | null;
 }
 
 export interface StopListResult {
@@ -42,12 +47,14 @@ export interface StopListResult {
 }
 
 export function stopsQuery(input: StopListInput) {
+  const bbox = input.bbox ?? null;
   return queryOptions({
-    queryKey: ['stops', input.q, input.limit] as const,
+    queryKey: ['stops', input.q, input.limit, bbox] as const,
     queryFn: async (): Promise<StopListResult> => {
       const envelope = await apiGetChecked(
         withQuery('/v1/stops', {
           q: input.q.length === 0 ? undefined : input.q,
+          bbox: bbox === null ? undefined : bbox,
           limit: input.limit,
         }),
         stopListSchema,
@@ -56,6 +63,32 @@ export function stopsQuery(input: StopListInput) {
     },
     staleTime: 10 * 60_000,
     gcTime: 24 * 60 * 60_000,
+  });
+}
+
+export function stopByCodeQuery(code: string | null) {
+  return queryOptions({
+    queryKey: ['stops', 'by-code', code] as const,
+    queryFn: async (): Promise<StopDetail> => {
+      const envelope = await apiGetChecked(
+        `/v1/stops/by-code/${encodeURIComponent(code ?? '')}`,
+        stopDetailSchema,
+      );
+      return envelope.data;
+    },
+    enabled: code !== null,
+    staleTime: 10 * 60_000,
+    gcTime: 24 * 60 * 60_000,
+  });
+}
+
+export function transparencyAnchorQuery(date: string) {
+  return queryOptions({
+    queryKey: ['transparency', 'anchor', date] as const,
+    queryFn: async (): Promise<TransparencyAnchor> =>
+      (await apiGetChecked(`/v1/transparency/anchor/${date}`, transparencyAnchorSchema)).data,
+    staleTime: 5 * 60_000,
+    gcTime: 60 * 60_000,
   });
 }
 

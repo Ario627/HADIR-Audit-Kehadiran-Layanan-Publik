@@ -5,6 +5,7 @@ import type {
   IdempotencyService,
 } from '../../common/idempotency/idempotency.service';
 import type { DevicesRepository } from '../../db/repositories/devices.repository';
+import type { OutboxRepository } from '../../db/repositories/outbox.repository';
 import type {
   ReportsRepository,
   StoredReportStatus,
@@ -51,6 +52,8 @@ function repositoryDouble(owner: string, status: StoredReportStatus = 'submitted
     lockReportInInstitution: async () => ({ status, deviceHash: owner }),
     updateStatus: async () => undefined,
     appendEvent: async () => 1,
+    setFollowUp: async () => undefined,
+    contactCiphertext: async () => null,
   } as unknown as ReportsRepository;
 }
 
@@ -71,6 +74,7 @@ function buildPartner(
   return {
     service: new PartnerReportsService(
       repositoryDouble(owner, status),
+      { enqueue: async () => undefined } as unknown as OutboxRepository,
       idempotency,
       audit.service,
       passthroughRunner,
@@ -103,6 +107,7 @@ function buildCitizen(
       idempotency,
       audit.service,
       passthroughRunner,
+      { claimForReport: async () => undefined } as never,
     ),
     audit,
   };

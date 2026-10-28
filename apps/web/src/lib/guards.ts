@@ -20,6 +20,7 @@ import type {
   StopSummary,
   TriageEvidence,
   TriageResult,
+  TransparencyAnchor,
   UploadTicket,
 } from '@hadir/contracts';
 import type { PayloadSchema } from './api';
@@ -313,6 +314,13 @@ export const stopListSchema: PayloadSchema<StopSummary[]> = {
       items.push(stop);
     }
     return { success: true, data: items };
+  },
+};
+
+export const stopSummarySchema: PayloadSchema<StopSummary> = {
+  safeParse(value) {
+    const stop = toStopSummary(value);
+    return stop === null ? { success: false } : { success: true, data: stop };
   },
 };
 
@@ -954,7 +962,7 @@ export const triageResultSchema: PayloadSchema<TriageResult> = {
     return result === null ? { success: false } : { success: true, data: result };
   },
 };
-function toReportListItem(value: unknown): ReportListItem | null {
+export function toReportListItem(value: unknown): ReportListItem | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -1030,7 +1038,7 @@ function toReportEvent(value: unknown): ReportDetail['events'][number] | null {
   return { kind, actorType: value.actorType as ReportDetail['events'][number]['actorType'], note, createdAt };
 }
 
-function toReportDetail(value: unknown): ReportDetail | null {
+export function toReportDetail(value: unknown): ReportDetail | null {
   if (!isRecord(value) || !Array.isArray(value.events)) {
     return null;
   }
@@ -1230,5 +1238,40 @@ export const storedUploadSchema: PayloadSchema<StoredUpload> = {
   safeParse(value) {
     const stored = toStoredUpload(value);
     return stored === null ? { success: false } : { success: true, data: stored };
+  },
+};
+
+const ANCHOR_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function toTransparencyAnchor(value: unknown): TransparencyAnchor | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const date = readText(value.date, 10);
+  const merkleRoot = readText(value.merkleRoot, 128);
+  const eventCount = readCount(value.eventCount, 10_000_000);
+  const verifyUrl = readText(value.verifyUrl, 500);
+  const publishedAt = readIsoDateTime(value.publishedAt);
+  const txRef = readNullableText(value.txRef, 200);
+  if (
+    date === null ||
+    merkleRoot === null ||
+    eventCount === null ||
+    verifyUrl === null ||
+    publishedAt === null ||
+    txRef === undefined
+  ) {
+    return null;
+  }
+  if (!ANCHOR_DATE.test(date)) {
+    return null;
+  }
+  return { date, merkleRoot, eventCount, txRef, verifyUrl, publishedAt };
+}
+
+export const transparencyAnchorSchema: PayloadSchema<TransparencyAnchor> = {
+  safeParse(value) {
+    const anchor = toTransparencyAnchor(value);
+    return anchor === null ? { success: false } : { success: true, data: anchor };
   },
 };

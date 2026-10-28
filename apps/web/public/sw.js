@@ -1,10 +1,35 @@
-const VERSION = 'hadir-v1';
+const VERSION = 'hadir-v2';
 const SHELL = `${VERSION}-shell`;
 const ASSETS = `${VERSION}-assets`;
 const API = `${VERSION}-api`;
 const PRECACHE = ['/', '/manifest.webmanifest'];
 const API_PREFIX = '/v1/';
 const ASSET_PREFIXES = ['/assets/', '/icons/'];
+const PRIVATE_PREFIXES = [
+  '/v1/reports/mine',
+  '/v1/episodes',
+  '/v1/devices',
+  '/v1/partner',
+  '/v1/admin',
+  '/v1/internal',
+  '/v1/uploads',
+  '/v1/triage',
+];
+const API_MAX_ENTRIES = 80;
+const SHELL_MAX_ENTRIES = 24;
+
+function isPrivate(pathname) {
+  return PRIVATE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
+async function trimCache(cacheName, maxEntries) {
+  const cache = await caches.open(cacheName);
+  const keys = await cache.keys();
+  if (keys.length <= maxEntries) {
+    return;
+  }
+  await Promise.all(keys.slice(0, keys.length - maxEntries).map((key) => cache.delete(key)));
+}
 
 function cacheable(response) {
   if (!response.ok || response.type === 'opaque') {
@@ -20,6 +45,7 @@ async function networkFirst(request, cacheName) {
     const response = await fetch(request);
     if (cacheable(response)) {
       await cache.put(request, response.clone());
+      await trimCache(cacheName, API_MAX_ENTRIES);
     }
     return response;
   } catch (error) {
@@ -53,6 +79,7 @@ async function navigateWithShell(request) {
       if (new URL(request.url).pathname === '/') {
         await cache.put('/', response.clone());
       }
+      await trimCache(SHELL, SHELL_MAX_ENTRIES);
     }
     return response;
   } catch (error) {
@@ -100,6 +127,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   if (url.pathname.startsWith(API_PREFIX)) {
+    if (isPrivate(url.pathname)) {
+      return;
+    }
     event.respondWith(networkFirst(request, API));
     return;
   }

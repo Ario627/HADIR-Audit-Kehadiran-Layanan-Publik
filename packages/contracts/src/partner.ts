@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { Cursor, ReportCategory, ReportStatus } from './common';
+import { Cursor, IsoDateTime, ReportCategory, ReportStatus } from './common';
+import { ReportDetail } from './report';
 
 export const PartnerEmail = z
   .email()
@@ -102,6 +103,24 @@ export const PartnerInboxQuery = z
   .strict();
 
 export type PartnerInboxQuery = z.infer<typeof PartnerInboxQuery>;
+
+export const PartnerReportDetail = ReportDetail.extend({
+  followUpAt: IsoDateTime.nullable(),
+  media: z
+    .array(
+      z.object({
+        mediaId: z.uuid(),
+        mime: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+        width: z.number().int().positive().nullable(),
+        height: z.number().int().positive().nullable(),
+        status: z.enum(['pending', 'approved', 'rejected']),
+        url: z.string().min(1).max(500).nullable(),
+      }),
+    )
+    .max(9),
+});
+
+export type PartnerReportDetail = z.infer<typeof PartnerReportDetail>;
 
 export const PartnerPasswordChange = z
   .object({
