@@ -7,9 +7,35 @@ import * as schema from './schema';
 
 export type Database = NodePgDatabase<typeof schema>;
 
+export type ReadScope = 'none' | 'public' | 'citizen' | 'partner';
+
 export interface TransactionContext {
   requestId?: string;
   deviceHash?: string;
+  userId?: string;
+  institutionId?: string;
+  scope?: ReadScope;
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function transactionScope(context: TransactionContext): ReadScope {
+  if (context.scope !== undefined) {
+    return context.scope;
+  }
+  if (context.userId !== undefined) {
+    return 'partner';
+  }
+  if (context.deviceHash !== undefined) {
+    return 'citizen';
+  }
+  return 'none';
+}
+
+function assertUuid(value: string, field: string): void {
+  if (!UUID_PATTERN.test(value)) {
+    throw new Error(`${field} tidak valid untuk konteks database.`);
+  }
 }
 
 export interface DatabaseHealth {
@@ -51,7 +77,7 @@ function createPool(): Pool {
     maxUses: 7_500,
     maxLifetimeSeconds: 1_800,
     allowExitOnIdle: false,
-    options: '-c timezone=UTC',
+    options: '-c timezone=UTC -c app.scope=none',
     ssl: sslFor(env.DB_SSL_MODE, env.dbSslCa),
   };
   const pool = new Pool(config);
@@ -96,6 +122,19 @@ export async function configureTransaction(
       sql`SELECT set_config('app.device_hash', ${context.deviceHash}, true)`,
     );
   }
+  if (context.userId !== undefined) {
+    assertUuid(context.userId, 'userId');
+    await tx.execute(sql`SELECT set_config('app.user_id', ${context.userId}, true)`);
+  }
+  if (context.institutionId !== undefined) {
+    assertUuid(context.institutionId, 'institutionId');
+    await tx.execute(
+      sql`SELECT set_config('app.institution_id', ${context.institutionId}, true)`,
+    );
+  }
+  await tx.execute(
+    sql`SELECT set_config('app.scope', ${transactionScope(context)}, true)`,
+  );
 }
 
 export async function withTransaction<T>(

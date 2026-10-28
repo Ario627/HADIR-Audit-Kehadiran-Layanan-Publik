@@ -7,6 +7,8 @@ process.env.DATABASE_URL ??= 'postgres://hadir:hadir@localhost:5432/hadir';
 process.env.REDIS_URL ??= 'redis://localhost:6379';
 process.env.WEB_ORIGIN ??= 'http://localhost:5173';
 process.env.DEV_TOOLS ??= 'false';
+process.env.CONTACT_ENCRYPTION_KEY ??= Buffer.alloc(32, 11).toString('base64');
+process.env.UPLOAD_ROOT ??= '.uploads-test';
 process.env.QR_KEYRING_JSON ??= JSON.stringify({
   '202610': {
     id: 'k1',

@@ -10,8 +10,13 @@ import type {
   StoredReportStatus,
 } from '../../db/repositories/reports.repository';
 import { recordingAudit } from '../../test-support/audit.stub';
+import type { Transaction } from '../../db/client';
+import type { TransactionRunner } from '../../db/transaction-runner';
 import { AppError } from '../../common/errors/app-error';
 import { ReportsService } from './reports.service';
+import { PartnerReportsService } from '../partner/partner-reports.service';
+
+const passthroughRunner: TransactionRunner = async (work) => work({} as Transaction);
 
 const PUBLIC_ID = 'LPR-2026-004242';
 const REPORT_ID = '0192f0c4-0000-7000-8000-0000000000ab';
@@ -49,7 +54,32 @@ function repositoryDouble(owner: string, status: StoredReportStatus = 'submitted
   } as unknown as ReportsRepository;
 }
 
-function buildService(
+function buildPartner(
+  owner: string,
+  status: StoredReportStatus = 'submitted',
+): { service: PartnerReportsService; audit: ReturnType<typeof recordingAudit> } {
+  const audit = recordingAudit();
+  const idempotency = {
+    execute: async (
+      _input: unknown,
+      work: (tx: unknown) => Promise<{ status: number; body: unknown }>,
+    ) => {
+      const result = await work({});
+      return { status: result.status, body: result.body, replayed: false };
+    },
+  } as unknown as IdempotencyService;
+  return {
+    service: new PartnerReportsService(
+      repositoryDouble(owner, status),
+      idempotency,
+      audit.service,
+      passthroughRunner,
+    ),
+    audit,
+  };
+}
+
+function buildCitizen(
   owner: string,
   status: StoredReportStatus = 'submitted',
 ): { service: ReportsService; audit: ReturnType<typeof recordingAudit> } {
@@ -67,16 +97,22 @@ function buildService(
     findByHash: async () => ({ id: 'd1', trustScore: 0.5, revokedAt: null }),
   } as unknown as DevicesRepository;
   return {
-    service: new ReportsService(repositoryDouble(owner, status), devices, idempotency, audit.service),
+    service: new ReportsService(
+      repositoryDouble(owner, status),
+      devices,
+      idempotency,
+      audit.service,
+      passthroughRunner,
+    ),
     audit,
   };
 }
 
 describe('audit hooks on partner actions', () => {
   it('records the linked partner as the actor, not a placeholder', async () => {
-    const { service, audit } = buildService('c'.repeat(64));
+    const { service, audit } = buildPartner('c'.repeat(64));
 
-    await service.partnerAction(PUBLIC_ID, { action: 'acknowledge' }, KEY, PARTNER, CONTEXT);
+    await service.act(PUBLIC_ID, { action: 'acknowledge' }, KEY, PARTNER, CONTEXT);
 
     expect(audit.denials).toHaveLength(0);
     expect(audit.records).toHaveLength(1);
@@ -98,13 +134,13 @@ describe('audit hooks on partner actions', () => {
   });
 
   it('writes no audit row when the report is outside the institution', async () => {
-    const { service, audit } = buildService('c'.repeat(64));
+    const { service, audit } = buildPartner('c'.repeat(64));
     const repository = (service as unknown as { repository: ReportsRepository }).repository;
     (repository as unknown as { findReportIdInInstitution: unknown }).findReportIdInInstitution =
       async () => null;
 
     await expect(
-      service.partnerAction(PUBLIC_ID, { action: 'acknowledge' }, KEY, PARTNER, CONTEXT),
+      service.act(PUBLIC_ID, { action: 'acknowledge' }, KEY, PARTNER, CONTEXT),
     ).rejects.toBeInstanceOf(AppError);
 
     expect(audit.records).toHaveLength(0);
@@ -112,7 +148,7 @@ describe('audit hooks on partner actions', () => {
   });
 
   it('records a self-corroboration denial', async () => {
-    const { service, audit } = buildService(DEVICE.hash);
+    const { service, audit } = buildCitizen(DEVICE.hash);
 
     await expect(
       service.corroborate(PUBLIC_ID, {}, KEY, DEVICE, CONTEXT),
@@ -126,7 +162,7 @@ describe('audit hooks on partner actions', () => {
   });
 
   it('records no denial when corroboration is legitimate', async () => {
-    const { service, audit } = buildService('c'.repeat(64));
+    const { service, audit } = buildCitizen('c'.repeat(64));
     const repository = (service as unknown as { repository: ReportsRepository }).repository;
     (repository as unknown as { addCorroboration: unknown }).addCorroboration = async () => ({
       inserted: true,

@@ -291,6 +291,29 @@ export class StopsRepository {
     return toDetail(row, grouped);
   }
 
+  async listAuthoritiesForStop(query: StopAuthorityQuery): Promise<StopAuthorityRow[]> {
+    const result = await this.db.execute(sql`
+      SELECT i.id AS institution_id, i.name AS institution_name,
+             i.official_site_url AS site_url, am.verified
+      FROM stops s
+      INNER JOIN authority_map am
+        ON am.city_id = s.city_id AND am.asset_kind = 'stop' AND am.asset_ref = s.code
+      INNER JOIN institutions i ON i.id = am.institution_id
+      WHERE s.id = ${query.stopId}
+      ORDER BY am.verified DESC, i.name
+      LIMIT 10
+    `);
+    return result.rows.map((raw) => {
+      const row = raw as Record<string, unknown>;
+      return {
+        institutionId: String(row.institution_id),
+        institutionName: String(row.institution_name),
+        siteUrl: typeof row.site_url === 'string' ? row.site_url : null,
+        verified: row.verified === true,
+      };
+    });
+  }
+
   async findByCode(code: string): Promise<StopDetail | null> {
     const rows = await this.db
       .select(stopSelection)
@@ -372,4 +395,14 @@ export class StopsRepository {
       status: row.status,
     }));
   }
+}
+export interface StopAuthorityRow {
+  institutionId: string;
+  institutionName: string;
+  siteUrl: string | null;
+  verified: boolean;
+}
+
+export interface StopAuthorityQuery {
+  stopId: string;
 }

@@ -26,6 +26,22 @@ export class StopsController {
     });
   }
 
+  @Get('by-code/:code/authorities')
+  @Header('Cache-Control', DETAIL_CACHE)
+  @RateLimit(RATE_LIMIT_POLICIES.stopsRead)
+  async authorities(@Param('code') code: string, @Req() request: Request) {
+    const rows = await this.stops.authoritiesByCode(code.toUpperCase());
+    return ok(rows, requestIdOf(request));
+  }
+
+  @Get('by-code/:code')
+  @Header('Cache-Control', DETAIL_CACHE)
+  @RateLimit(RATE_LIMIT_POLICIES.stopsRead)
+  async byCode(@Param('code') code: string, @Req() request: Request) {
+    const stop = await this.stops.getByCode(code.toUpperCase());
+    return ok(stop, requestIdOf(request));
+  }
+
   @Get(':id')
   @Header('Cache-Control', DETAIL_CACHE)
   @RateLimit(RATE_LIMIT_POLICIES.stopsRead)

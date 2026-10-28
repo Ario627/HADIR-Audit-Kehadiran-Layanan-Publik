@@ -17,13 +17,16 @@ function episode(id: string): ReapedEpisode {
 interface Harness {
   pruneCalls: number;
   reapCalls: number;
+  credentialCalls: number;
 }
 
 interface Behaviour {
   prune?: (call: number) => number;
   reap?: (call: number) => ReapedEpisode[];
+  credentials?: (call: number) => number;
   failPrune?: boolean;
   failReap?: boolean;
+  failCredentials?: boolean;
 }
 
 function buildRepository(harness: Harness, behaviour: Behaviour = {}): MaintenanceRepository {
@@ -36,6 +39,21 @@ function buildRepository(harness: Harness, behaviour: Behaviour = {}): Maintenan
           throw new Error('prune down');
         }
         const removed = behaviour.prune?.(harness.pruneCalls) ?? options.batchSize;
+        total += removed;
+        if (removed < options.batchSize) {
+          return total;
+        }
+      }
+      return total;
+    },
+    drainExpiredCredentials: async (options: PruneOptions) => {
+      let total = 0;
+      for (let round = 0; round < options.maxRounds; round += 1) {
+        harness.credentialCalls += 1;
+        if (behaviour.failCredentials === true) {
+          throw new Error('credential prune down');
+        }
+        const removed = behaviour.credentials?.(harness.credentialCalls) ?? 0;
         total += removed;
         if (removed < options.batchSize) {
           return total;
@@ -72,7 +90,7 @@ function buildWorker(harness: Harness, behaviour: Behaviour = {}): MaintenanceWo
 
 describe('MaintenanceWorker', () => {
   it('drains until a short batch is observed', async () => {
-    const harness: Harness = { pruneCalls: 0, reapCalls: 0 };
+    const harness: Harness = { pruneCalls: 0, reapCalls: 0, credentialCalls: 0 };
     const summary = await buildWorker(harness, { prune: () => 1 }).runOnce();
 
     expect(harness.pruneCalls).toBe(1);
@@ -81,7 +99,7 @@ describe('MaintenanceWorker', () => {
   });
 
   it('accumulates full batches up to the round budget', async () => {
-    const harness: Harness = { pruneCalls: 0, reapCalls: 0 };
+    const harness: Harness = { pruneCalls: 0, reapCalls: 0, credentialCalls: 0 };
     const summary = await buildWorker(harness, { prune: () => 4 }).runOnce();
 
     expect(harness.pruneCalls).toBe(PRUNE.maxRounds);
@@ -89,14 +107,14 @@ describe('MaintenanceWorker', () => {
   });
 
   it('never exceeds the reap round budget', async () => {
-    const harness: Harness = { pruneCalls: 0, reapCalls: 0 };
+    const harness: Harness = { pruneCalls: 0, reapCalls: 0, credentialCalls: 0 };
     await buildWorker(harness).runOnce();
 
     expect(harness.reapCalls).toBe(3);
   });
 
   it('counts a failing task without aborting the other', async () => {
-    const harness: Harness = { pruneCalls: 0, reapCalls: 0 };
+    const harness: Harness = { pruneCalls: 0, reapCalls: 0, credentialCalls: 0 };
     const summary = await buildWorker(harness, {
       failPrune: true,
       reap: () => [episode('a')],
@@ -108,15 +126,46 @@ describe('MaintenanceWorker', () => {
   });
 
   it('records a reap failure separately', async () => {
-    const harness: Harness = { pruneCalls: 0, reapCalls: 0 };
+    const harness: Harness = { pruneCalls: 0, reapCalls: 0, credentialCalls: 0 };
     const summary = await buildWorker(harness, { failReap: true, prune: () => 0 }).runOnce();
 
     expect(summary.failures).toBe(1);
     expect(summary.episodesReaped).toBe(0);
   });
 
+  it('prunes expired credentials alongside the other tasks', async () => {
+    const harness: Harness = { pruneCalls: 0, reapCalls: 0, credentialCalls: 0 };
+    const summary = await buildWorker(harness, {
+      prune: () => 0,
+      credentials: () => 3,
+    }).runOnce();
+
+    expect(summary.credentialsRemoved).toBe(3);
+    expect(summary.failures).toBe(0);
+    expect(harness.credentialCalls).toBe(1);
+  });
+
+  it('keeps going when the credential prune fails', async () => {
+    const harness: Harness = { pruneCalls: 0, reapCalls: 0, credentialCalls: 0 };
+    const summary = await buildWorker(harness, {
+      prune: () => 1,
+      failCredentials: true,
+    }).runOnce();
+
+    expect(summary.failures).toBe(1);
+    expect(summary.idempotencyRemoved).toBe(1);
+  });
+
+  it('stops credential pruning once a short batch is observed', async () => {
+    const harness: Harness = { pruneCalls: 0, reapCalls: 0, credentialCalls: 0 };
+    await buildWorker(harness, { prune: () => 0, credentials: (call) => (call === 1 ? 4 : 0) })
+      .runOnce();
+
+    expect(harness.credentialCalls).toBe(2);
+  });
+
   it('stays idle after stop', async () => {
-    const harness: Harness = { pruneCalls: 0, reapCalls: 0 };
+    const harness: Harness = { pruneCalls: 0, reapCalls: 0, credentialCalls: 0 };
     const worker = buildWorker(harness);
     await worker.stop();
     await worker.start();

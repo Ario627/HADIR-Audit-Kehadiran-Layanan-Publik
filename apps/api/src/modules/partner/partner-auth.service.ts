@@ -64,7 +64,7 @@ export class PartnerAuthService {
   } {
     return {
       httpOnly: true,
-      secure: true,
+      secure: env.cookieSecure,
       sameSite: 'lax' as const,
       path: '/',
       maxAge: SESSION_POLICY.absoluteMs,

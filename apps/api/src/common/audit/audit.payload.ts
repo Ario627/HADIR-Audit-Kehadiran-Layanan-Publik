@@ -59,7 +59,7 @@ export function sanitizeAuditPayload(
   payload: Record<string, unknown>,
   depth = 0,
 ): Record<string, unknown> {
-  const clean: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  const clean: Record<string, unknown> = {};
   let kept = 0;
   for (const [key, value] of Object.entries(payload)) {
     if (kept >= MAX_KEYS) {

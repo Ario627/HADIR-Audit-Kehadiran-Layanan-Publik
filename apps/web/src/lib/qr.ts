@@ -13,6 +13,7 @@ export interface QrSearchInput {
   e?: string;
   k?: string;
   s?: string;
+  w?: string;
 }
 
 export function readStopCode(value: unknown): string | null {
@@ -44,6 +45,9 @@ export function readQrSearch(raw: Record<string, unknown>): QrSearchInput {
   }
   if (typeof raw.s === 'string') {
     output.s = raw.s.slice(0, 22);
+  }
+  if (raw.w === '30d') {
+    output.w = '30d';
   }
   return output;
 }

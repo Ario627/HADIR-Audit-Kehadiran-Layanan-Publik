@@ -7,6 +7,7 @@ import {
   type RouteListResult,
   type RouteRecord,
   type RouteStopRecord,
+  type StopAuthorityRow,
   type StopListResult,
 } from "../../db/repositories/stops.repository";
 
@@ -24,6 +25,11 @@ export class StopsService {
       throw new AppError('NOT_FOUND', { detail: 'Halte tidak ditemukan.' });
     }
     return stop;
+  }
+
+  async authoritiesByCode(code: string): Promise<StopAuthorityRow[]> {
+    const stop = await this.getByCode(code);
+    return this.stops.listAuthoritiesForStop({ stopId: stop.id });
   }
 
   async getByCode(code: string): Promise<StopDetail> {

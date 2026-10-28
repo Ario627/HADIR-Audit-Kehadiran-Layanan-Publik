@@ -1,3 +1,4 @@
+import { forgetEtag, readCachedEnvelope, readEtag, rememberEtag } from './etag-cache';
 export interface ApiMeta {
   requestId: string;
   generatedAt: string;
@@ -258,9 +259,15 @@ function readRetryAfter(response: Response): number | null {
   return Number.isFinite(seconds) && seconds >= 0 && seconds <= 86_400 ? Math.ceil(seconds) : null;
 }
 
+function isPublicCacheable(response: Response): boolean {
+  const policy = response.headers.get('cache-control') ?? '';
+  return !/no-store|private/i.test(policy);
+}
+
 async function performRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
+  allowConditionalRetry = true,
 ): Promise<ApiEnvelope<T>> {
   const method = options.method ?? 'GET';
   const isWrite = method !== 'GET';
@@ -279,6 +286,12 @@ async function performRequest<T>(
   const csrf = csrfToken();
   if (csrf !== null) {
     headers.set('X-CSRF-Token', csrf);
+  }
+  if (method === 'GET') {
+    const known = readEtag(path);
+    if (known !== null) {
+      headers.set('If-None-Match', known);
+    }
   }
 
   const timeout = AbortSignal.timeout(
@@ -315,6 +328,21 @@ async function performRequest<T>(
     });
   }
 
+  if (response.status === 304) {
+    const cached = readCachedEnvelope<ApiEnvelope<T>>(path);
+    if (cached !== null) {
+      return cached;
+    }
+    if (!allowConditionalRetry) {
+      throw new ApiError('Server mengirim 304 tanpa salinan lokal.', {
+        status: 304,
+        code: 'INVALID_RESPONSE',
+      });
+    }
+    forgetEtag(path);
+    return performRequest<T>(path, options, false);
+  }
+
   if (!response.ok) {
     throw await toApiError(response);
   }
@@ -346,6 +374,10 @@ async function performRequest<T>(
       code: 'INVALID_RESPONSE',
       requestId,
     });
+  }
+  const etag = response.headers.get('etag');
+  if (etag !== null && method === 'GET' && isPublicCacheable(response)) {
+    rememberEtag(path, etag, envelope);
   }
   return envelope;
 }
@@ -411,13 +443,86 @@ export function apiPost<T>(
 ): Promise<ApiEnvelope<T>> {
   return apiRequest<T>(path, { ...options, method: 'POST', body });
 }
-
 export function apiPatch<T>(
   path: string,
   body: unknown,
   options: WriteOptions = {},
 ): Promise<ApiEnvelope<T>> {
   return apiRequest<T>(path, { ...options, method: 'PATCH', body });
+}
+
+async function performPutBinary<T>(
+  path: string,
+  body: Blob,
+  options: { headers?: HeadersInit; timeoutMs?: number },
+): Promise<ApiEnvelope<T>> {
+  await ensureDevice();
+  const headers = new Headers(options.headers);
+  headers.set('Accept', 'application/json');
+  const csrf = csrfToken();
+  if (csrf !== null) {
+    headers.set('X-CSRF-Token', csrf);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'PUT',
+      headers,
+      credentials: 'include',
+      body,
+      signal: AbortSignal.timeout(options.timeoutMs ?? WRITE_TIMEOUT_MS),
+    });
+  } catch (error) {
+    throw new ApiError('Tidak bisa mengunggah berkas. Periksa koneksi.', {
+      status: 0,
+      code: 'NETWORK_ERROR',
+      cause: error,
+    });
+  }
+
+  if (!response.ok) {
+    throw await toApiError(response);
+  }
+
+  const requestId = response.headers.get('x-request-id') ?? '';
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    throw new ApiError('Respons unggah tidak berisi JSON yang valid.', {
+      status: response.status,
+      code: 'INVALID_RESPONSE',
+      requestId,
+      cause: error,
+    });
+  }
+
+  const envelope = parseEnvelope<T>(payload, requestId);
+  if (envelope === null) {
+    throw new ApiError('Respons unggah tidak sesuai kontrak.', {
+      status: response.status,
+      code: 'INVALID_RESPONSE',
+      requestId,
+    });
+  }
+  return envelope;
+}
+
+export async function apiPutBinary<T>(
+  path: string,
+  body: Blob,
+  options: { headers?: HeadersInit; timeoutMs?: number } = {},
+): Promise<ApiEnvelope<T>> {
+  try {
+    return await performPutBinary<T>(path, body, options);
+  } catch (error) {
+    if (!isRecoverableSessionError(error)) {
+      throw error;
+    }
+    resetDevice();
+    return performPutBinary<T>(path, body, options);
+  }
 }
 
 export function withQuery(

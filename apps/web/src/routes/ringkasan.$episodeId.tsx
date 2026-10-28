@@ -98,7 +98,14 @@ function SummaryPage() {
       </p>
 
       <div className="actions">
-        <Link to="/" className="btn">
+        <Link
+          to="/lapor"
+          search={{ halte: episode.stopCode }}
+          className="btn"
+        >
+          Lapor sesuatu di halte ini
+        </Link>
+        <Link to="/" className="btn btn--ghost">
           Ke papan
         </Link>
         <Link to="/metodologi" className="btn btn--ghost">

@@ -40,9 +40,6 @@ export const reports = pgTable(
     text: text('text').notNull(),
     status: reportStatus('status').notNull().default('submitted'),
     moderation: moderationStatus('moderation').notNull().default('pending'),
-    authorityId: uuid('authority_id').references(() => institutions.id, {
-      onDelete: 'set null',
-    }),
     institutionId: uuid('institution_id').references(() => institutions.id, {
       onDelete: 'set null',
     }),

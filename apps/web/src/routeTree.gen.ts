@@ -10,7 +10,12 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LaporRouteImport } from './routes/lapor'
 import { Route as MetodologiRouteImport } from './routes/metodologi'
+import { Route as PrivasiRouteImport } from './routes/privasi'
+import { Route as KoridorRouteIdRouteImport } from './routes/koridor.$routeId'
+import { Route as LaporanPublicIdRouteImport } from './routes/laporan.$publicId'
+import { Route as RadarRouteIdRouteImport } from './routes/radar.$routeId'
 import { Route as RingkasanEpisodeIdRouteImport } from './routes/ringkasan.$episodeId'
 import { Route as SStopCodeRouteImport } from './routes/s.$stopCode'
 import { Route as WaitEpisodeIdRouteImport } from './routes/wait.$episodeId'
@@ -20,9 +25,34 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LaporRoute = LaporRouteImport.update({
+  id: '/lapor',
+  path: '/lapor',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MetodologiRoute = MetodologiRouteImport.update({
   id: '/metodologi',
   path: '/metodologi',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivasiRoute = PrivasiRouteImport.update({
+  id: '/privasi',
+  path: '/privasi',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KoridorRouteIdRoute = KoridorRouteIdRouteImport.update({
+  id: '/koridor/$routeId',
+  path: '/koridor/$routeId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LaporanPublicIdRoute = LaporanPublicIdRouteImport.update({
+  id: '/laporan/$publicId',
+  path: '/laporan/$publicId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RadarRouteIdRoute = RadarRouteIdRouteImport.update({
+  id: '/radar/$routeId',
+  path: '/radar/$routeId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RingkasanEpisodeIdRoute = RingkasanEpisodeIdRouteImport.update({
@@ -43,14 +73,24 @@ const WaitEpisodeIdRoute = WaitEpisodeIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/lapor': typeof LaporRoute
   '/metodologi': typeof MetodologiRoute
+  '/privasi': typeof PrivasiRoute
+  '/koridor/$routeId': typeof KoridorRouteIdRoute
+  '/laporan/$publicId': typeof LaporanPublicIdRoute
+  '/radar/$routeId': typeof RadarRouteIdRoute
   '/ringkasan/$episodeId': typeof RingkasanEpisodeIdRoute
   '/s/$stopCode': typeof SStopCodeRoute
   '/wait/$episodeId': typeof WaitEpisodeIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/lapor': typeof LaporRoute
   '/metodologi': typeof MetodologiRoute
+  '/privasi': typeof PrivasiRoute
+  '/koridor/$routeId': typeof KoridorRouteIdRoute
+  '/laporan/$publicId': typeof LaporanPublicIdRoute
+  '/radar/$routeId': typeof RadarRouteIdRoute
   '/ringkasan/$episodeId': typeof RingkasanEpisodeIdRoute
   '/s/$stopCode': typeof SStopCodeRoute
   '/wait/$episodeId': typeof WaitEpisodeIdRoute
@@ -58,7 +98,12 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/lapor': typeof LaporRoute
   '/metodologi': typeof MetodologiRoute
+  '/privasi': typeof PrivasiRoute
+  '/koridor/$routeId': typeof KoridorRouteIdRoute
+  '/laporan/$publicId': typeof LaporanPublicIdRoute
+  '/radar/$routeId': typeof RadarRouteIdRoute
   '/ringkasan/$episodeId': typeof RingkasanEpisodeIdRoute
   '/s/$stopCode': typeof SStopCodeRoute
   '/wait/$episodeId': typeof WaitEpisodeIdRoute
@@ -67,21 +112,36 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/lapor'
     | '/metodologi'
+    | '/privasi'
+    | '/koridor/$routeId'
+    | '/laporan/$publicId'
+    | '/radar/$routeId'
     | '/ringkasan/$episodeId'
     | '/s/$stopCode'
     | '/wait/$episodeId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/lapor'
     | '/metodologi'
+    | '/privasi'
+    | '/koridor/$routeId'
+    | '/laporan/$publicId'
+    | '/radar/$routeId'
     | '/ringkasan/$episodeId'
     | '/s/$stopCode'
     | '/wait/$episodeId'
   id:
     | '__root__'
     | '/'
+    | '/lapor'
     | '/metodologi'
+    | '/privasi'
+    | '/koridor/$routeId'
+    | '/laporan/$publicId'
+    | '/radar/$routeId'
     | '/ringkasan/$episodeId'
     | '/s/$stopCode'
     | '/wait/$episodeId'
@@ -89,7 +149,12 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LaporRoute: typeof LaporRoute
   MetodologiRoute: typeof MetodologiRoute
+  PrivasiRoute: typeof PrivasiRoute
+  KoridorRouteIdRoute: typeof KoridorRouteIdRoute
+  LaporanPublicIdRoute: typeof LaporanPublicIdRoute
+  RadarRouteIdRoute: typeof RadarRouteIdRoute
   RingkasanEpisodeIdRoute: typeof RingkasanEpisodeIdRoute
   SStopCodeRoute: typeof SStopCodeRoute
   WaitEpisodeIdRoute: typeof WaitEpisodeIdRoute
@@ -104,11 +169,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/lapor': {
+      id: '/lapor'
+      path: '/lapor'
+      fullPath: '/lapor'
+      preLoaderRoute: typeof LaporRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/metodologi': {
       id: '/metodologi'
       path: '/metodologi'
       fullPath: '/metodologi'
       preLoaderRoute: typeof MetodologiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privasi': {
+      id: '/privasi'
+      path: '/privasi'
+      fullPath: '/privasi'
+      preLoaderRoute: typeof PrivasiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/koridor/$routeId': {
+      id: '/koridor/$routeId'
+      path: '/koridor/$routeId'
+      fullPath: '/koridor/$routeId'
+      preLoaderRoute: typeof KoridorRouteIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/laporan/$publicId': {
+      id: '/laporan/$publicId'
+      path: '/laporan/$publicId'
+      fullPath: '/laporan/$publicId'
+      preLoaderRoute: typeof LaporanPublicIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/radar/$routeId': {
+      id: '/radar/$routeId'
+      path: '/radar/$routeId'
+      fullPath: '/radar/$routeId'
+      preLoaderRoute: typeof RadarRouteIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ringkasan/$episodeId': {
@@ -137,7 +237,12 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LaporRoute: LaporRoute,
   MetodologiRoute: MetodologiRoute,
+  PrivasiRoute: PrivasiRoute,
+  KoridorRouteIdRoute: KoridorRouteIdRoute,
+  LaporanPublicIdRoute: LaporanPublicIdRoute,
+  RadarRouteIdRoute: RadarRouteIdRoute,
   RingkasanEpisodeIdRoute: RingkasanEpisodeIdRoute,
   SStopCodeRoute: SStopCodeRoute,
   WaitEpisodeIdRoute: WaitEpisodeIdRoute,

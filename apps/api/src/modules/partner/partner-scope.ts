@@ -5,12 +5,6 @@ import { roleSatisfies } from '../../common/auth/roles';
 
 export const PARTNER_ACTION_ROLE: PartnerRoleName = 'responder';
 
-export class ReportNotInScopeError extends AppError {
-  constructor() {
-    super('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
-  }
-}
-
 export function partnerCanAct(session: PartnerSession): boolean {
   return roleSatisfies(session.role, PARTNER_ACTION_ROLE);
 }
@@ -23,6 +17,6 @@ export function assertPartnerCanAct(session: PartnerSession): void {
   }
 }
 
-export function notInScope(): AppError {
-  return new ReportNotInScopeError();
+export function partnerIdempotencyScope(session: PartnerSession): string {
+  return `report.partner.${session.userId}.${session.institutionId}`;
 }

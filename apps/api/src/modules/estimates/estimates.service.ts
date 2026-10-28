@@ -6,6 +6,7 @@ import {
   type EvidenceLevel,
   type WaitEpisodeBucket,
 } from '@hadir/domain';
+import { MemoCache } from '../../common/cache/memo-cache';
 import { env } from '../../common/config/env';
 import type { BboxValue } from '../../common/geo/bbox';
 import { AppError } from '../../common/errors/app-error';
@@ -55,68 +56,6 @@ export interface CoverageSummaryItem {
 interface EstimateWindow {
   start: Date;
   end: Date;
-}
-
-interface CacheEntry<T> {
-  value: T;
-  expiresAt: number;
-}
-
-class MemoCache<T> {
-  private readonly entries = new Map<string, CacheEntry<T>>();
-  private readonly pending = new Map<string, Promise<T>>();
-
-  constructor(
-    private readonly ttlMs: number,
-    private readonly maxEntries: number,
-  ) {}
-
-  private read(key: string): T | null {
-    const entry = this.entries.get(key);
-    if (entry === undefined) {
-      return null;
-    }
-    if (entry.expiresAt <= Date.now()) {
-      this.entries.delete(key);
-      return null;
-    }
-    this.entries.delete(key);
-    this.entries.set(key, entry);
-    return entry.value;
-  }
-
-  private write(key: string, value: T): void {
-    this.entries.delete(key);
-    this.entries.set(key, { value, expiresAt: Date.now() + this.ttlMs });
-    while (this.entries.size > this.maxEntries) {
-      const oldest = this.entries.keys().next();
-      if (oldest.done === true) {
-        break;
-      }
-      this.entries.delete(oldest.value);
-    }
-  }
-
-  async getOrLoad(key: string, load: () => Promise<T>): Promise<T> {
-    const cached = this.read(key);
-    if (cached !== null) {
-      return cached;
-    }
-    const inFlight = this.pending.get(key);
-    if (inFlight !== undefined) {
-      return inFlight;
-    }
-    const promise = load()
-      .then((value) => {
-        this.write(key, value);
-        return value;
-      })
-      .finally(() => {
-        this.pending.delete(key);
-      });
-    this.pending.set(key, promise);
-    return promise;
-  }
 }
 
 function findRoute(stop: StopDetail, routeId: string | null): RouteSummary | null {
@@ -195,15 +134,18 @@ function coverageLevel(input: {
 
 @Injectable()
 export class EstimatesService {
-  private readonly cache = new MemoCache<Estimate>(CACHE_TTL_MS, CACHE_MAX_ENTRIES);
+  private readonly cache = new MemoCache<Estimate>({
+    ttlMs: CACHE_TTL_MS,
+    maxEntries: CACHE_MAX_ENTRIES,
+  });
   private readonly coverageCache = new MemoCache<{
     period: CoveragePeriod;
     cells: CoverageCell[];
-  }>(COVERAGE_TTL_MS, 512);
+  }>({ ttlMs: COVERAGE_TTL_MS, maxEntries: 512 });
   private readonly coverageSummaryCache = new MemoCache<{
     period: CoveragePeriod;
     stops: CoverageSummaryItem[];
-  }>(COVERAGE_TTL_MS, 512);
+  }>({ ttlMs: COVERAGE_TTL_MS, maxEntries: 512 });
 
   constructor(
     private readonly stops: StopsService,

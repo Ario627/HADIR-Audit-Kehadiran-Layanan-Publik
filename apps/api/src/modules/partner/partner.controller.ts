@@ -12,7 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { PartnerOtpRequest, PartnerSessionInput } from '@hadir/contracts';
+import { PartnerOtpRequest, PartnerPasswordChange, PartnerSessionInput } from '@hadir/contracts';
 import { AppError } from '../../common/errors/app-error';
 import { RateLimit, RATE_LIMIT_POLICIES } from '../../common/http/rate-limit.policy';
 import { contextOf, requestIdOf } from '../../common/http/request-context';
@@ -27,7 +27,7 @@ import { hashRequestFingerprint } from './partner.fingerprint';
 
 const NO_STORE = 'no-store, private, max-age=0';
 
-@Controller('v1/partner')
+@Controller('partner')
 @UseGuards(SessionGuard)
 export class PartnerController {
   constructor(
@@ -73,6 +73,24 @@ export class PartnerController {
       { expiresInSeconds: issued.expiresInSeconds, resendInSeconds: issued.resendInSeconds },
       requestIdOf(request),
     );
+  }
+
+  @Post('password')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', NO_STORE)
+  @RateLimit(RATE_LIMIT_POLICIES.partnerPassword)
+  @PartnerOnly('viewer')
+  @RequireFresh()
+  async changePassword(@Body() body: unknown, @Req() request: Request) {
+    const input = parseOrThrow(PartnerPasswordChange, body);
+    const session = partnerSessionOf(request);
+    const revoked = await this.service.changePassword(
+      session,
+      input.currentPassword,
+      input.newPassword,
+      { requestId: requestIdOf(request), ...hashRequestFingerprint(request) },
+    );
+    return ok({ changed: true, revokedSessions: revoked }, requestIdOf(request));
   }
 
   @Get('me')

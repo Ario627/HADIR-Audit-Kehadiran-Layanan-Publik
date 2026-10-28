@@ -11,6 +11,9 @@ export function Masthead() {
         <Link to="/" activeProps={{ className: 'is-active' }} activeOptions={{ exact: true }}>
           Papan
         </Link>
+        <Link to="/lapor" activeProps={{ className: 'is-active' }}>
+          Lapor
+        </Link>
         <Link to="/metodologi" activeProps={{ className: 'is-active' }}>
           Metodologi
         </Link>

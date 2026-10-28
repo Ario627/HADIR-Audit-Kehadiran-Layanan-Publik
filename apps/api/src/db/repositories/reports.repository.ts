@@ -55,7 +55,9 @@ export interface InsertReportValues {
   deviceDayHash: string;
   clientEventId: string;
   text: string;
-  authorityId: string | null;
+  institutionId: string | null;
+  contactEmailEnc: Buffer | null;
+  contactEmailHash: Buffer | null;
   evidenceScore: number;
   evidenceLevel: ReportRow['evidenceLevel'];
 }
@@ -166,7 +168,7 @@ function baseQuery(db: Database | Transaction) {
     .select(reportSelection)
     .from(reports)
     .innerJoin(stops, eq(reports.stopId, stops.id))
-    .leftJoin(institutions, eq(institutions.id, reports.authorityId));
+    .leftJoin(institutions, eq(institutions.id, reports.institutionId));
 }
 
 @Injectable()
@@ -236,8 +238,9 @@ export class ReportsRepository {
         deviceDayHash: values.deviceDayHash,
         clientEventId: values.clientEventId,
         text: values.text,
-        authorityId: values.authorityId,
-        institutionId: values.authorityId,
+        institutionId: values.institutionId,
+        contactEmailEnc: values.contactEmailEnc,
+        contactEmailHash: values.contactEmailHash,
         evidenceScore: values.evidenceScore,
         evidenceLevel: values.evidenceLevel,
       })
@@ -326,8 +329,11 @@ export class ReportsRepository {
     return rows[0] ?? null;
   }
 
-  async findPublicByPublicId(publicId: string): Promise<ReportRow | null> {
-    const rows = await baseQuery(this.db)
+  async findPublicByPublicId(
+    executor: Database | Transaction,
+    publicId: string,
+  ): Promise<ReportRow | null> {
+    const rows = await baseQuery(executor)
       .where(
         and(
           eq(reports.publicId, publicId),
@@ -351,9 +357,10 @@ export class ReportsRepository {
   }
 
   async listPublic(
+    executor: Database | Transaction,
     filters: ReportListFilters,
   ): Promise<{ items: ReportRow[]; hasMore: boolean }> {
-    const rows = await baseQuery(this.db)
+    const rows = await baseQuery(executor)
       .where(publicFilters(filters))
       .orderBy(desc(reports.createdAt), desc(reports.id))
       .limit(Math.min(filters.limit, MAX_LIST_LIMIT) + 1);
@@ -362,6 +369,7 @@ export class ReportsRepository {
   }
 
   async listForDevice(
+    executor: Database | Transaction,
     deviceHash: string,
     limit: number,
     cursor: { createdAt: Date; id: string } | null,
@@ -372,7 +380,7 @@ export class ReportsRepository {
         sql`(${reports.createdAt}, ${reports.id}) < (${cursor.createdAt}, ${cursor.id})`,
       );
     }
-    const rows = await baseQuery(this.db)
+    const rows = await baseQuery(executor)
       .where(and(...conditions))
       .orderBy(desc(reports.createdAt), desc(reports.id))
       .limit(Math.min(limit, MAX_LIST_LIMIT) + 1);
@@ -507,6 +515,7 @@ export class ReportsRepository {
   }
 
   async listForInstitution(
+    executor: Database | Transaction,
     institutionId: string,
     filters: ReportListFilters,
   ): Promise<{ items: ReportRow[]; hasMore: boolean }> {
@@ -522,7 +531,7 @@ export class ReportsRepository {
         sql`(${reports.createdAt}, ${reports.id}) < (${filters.cursor.createdAt}, ${filters.cursor.id})`,
       );
     }
-    const rows = await baseQuery(this.db)
+    const rows = await baseQuery(executor)
       .where(and(...conditions))
       .orderBy(desc(reports.createdAt), desc(reports.id))
       .limit(Math.min(filters.limit, MAX_LIST_LIMIT) + 1);
@@ -530,10 +539,36 @@ export class ReportsRepository {
     return { items: hasMore ? rows.slice(0, filters.limit) : rows, hasMore };
   }
 
-  async findInInstitution(publicId: string, institutionId: string): Promise<ReportRow | null> {
-    const rows = await baseQuery(this.db)
+  async findInInstitution(
+    executor: Database | Transaction,
+    publicId: string,
+    institutionId: string,
+  ): Promise<ReportRow | null> {
+    const rows = await baseQuery(executor)
       .where(and(eq(reports.publicId, publicId), eq(reports.institutionId, institutionId)))
       .limit(1);
     return rows[0] ?? null;
+  }
+
+  async listEventsFor(executor: Database | Transaction, reportId: string): Promise<EventRecord[]> {
+    const rows = await executor
+      .select({
+        kind: reportEvents.kind,
+        actorType: reportEvents.actorType,
+        payload: reportEvents.payload,
+        createdAt: reportEvents.createdAt,
+      })
+      .from(reportEvents)
+      .where(eq(reportEvents.reportId, reportId))
+      .orderBy(asc(reportEvents.seq));
+    return rows.map((row) => {
+      const note = row.payload.note;
+      return {
+        kind: row.kind,
+        actorType: row.actorType,
+        note: typeof note === 'string' ? note.slice(0, 500) : null,
+        createdAt: row.createdAt,
+      };
+    });
   }
 }

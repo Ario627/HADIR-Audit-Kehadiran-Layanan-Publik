@@ -1,12 +1,12 @@
 import type { PartnerSession } from '../../common/auth/partner-session';
-import type { DevicesRepository } from '../../db/repositories/devices.repository';
-import type {
-  ReportRow,
-  ReportsRepository,
-} from '../../db/repositories/reports.repository';
+import type { ReportRow, ReportsRepository } from '../../db/repositories/reports.repository';
 import type { IdempotencyService } from '../../common/idempotency/idempotency.service';
 import { auditStub } from '../../test-support/audit.stub';
-import { ReportsService } from '../reports/reports.service';
+import type { Transaction } from '../../db/client';
+import type { TransactionRunner } from '../../db/transaction-runner';
+import { PartnerReportsService } from './partner-reports.service';
+
+const passthroughRunner: TransactionRunner = async (work) => work({} as Transaction);
 
 const SESSION: PartnerSession = {
   sessionId: '0192f0c4-0000-7000-8000-0000000000f1',
@@ -35,7 +35,7 @@ function row(publicId: string): ReportRow {
     deviceHash: 'a'.repeat(64),
     deviceDayHash: 'b'.repeat(64),
     text: 'Halte ini sudah lama tidak ada bus yang datang.',
-    authorityId: SESSION.institutionId,
+    institutionId: SESSION.institutionId,
     authorityName: 'Dishub',
     evidenceScore: 0.4,
     evidenceLevel: 'medium',
@@ -55,19 +55,22 @@ interface InboxCapture {
 
 function buildService(capture: InboxCapture, items: ReportRow[] = [row('LPR-2026-000001')]) {
   const repository = {
-    listForInstitution: async (institutionId: string) => {
+    listForInstitution: async (_tx: unknown, institutionId: string) => {
       capture.institutionQueries.push(institutionId);
       return { items, hasMore: false };
     },
-    findInInstitution: async (publicId: string, institutionId: string) => {
+    findInInstitution: async (_tx: unknown, publicId: string, institutionId: string) => {
       capture.detailQueries.push({ publicId, institutionId });
       return items.find((item) => item.publicId === publicId) ?? null;
     },
-    listEvents: async () => [],
+    listEventsFor: async () => [],
   } as unknown as ReportsRepository;
-  const devices = {} as DevicesRepository;
-  const idempotency = {} as IdempotencyService;
-  return new ReportsService(repository, devices, idempotency, auditStub());
+  return new PartnerReportsService(
+    repository,
+    {} as IdempotencyService,
+    auditStub(),
+    passthroughRunner,
+  );
 }
 
 function newCapture(): InboxCapture {
@@ -97,6 +100,7 @@ describe('partner inbox', () => {
     const result = await buildService(capture).listInbox({ limit: 20 }, SESSION);
 
     expect(result.items[0]?.publicId).toBe('LPR-2026-000001');
+    expect(result.items[0]?.evidenceLevel).toBe('medium');
     expect(result.hasMore).toBe(false);
   });
 

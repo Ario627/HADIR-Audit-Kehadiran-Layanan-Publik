@@ -52,7 +52,8 @@ describe('sanitizeAuditPayload', () => {
     const clean = sanitizeAuditPayload(dirty);
 
     expect(clean.ok).toBe(1);
-    expect(clean.__proto__).toBeUndefined();
+    expect(Object.hasOwn(clean, '__proto__')).toBe(false);
+    expect(Object.hasOwn(clean, 'polluted')).toBe(false);
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 

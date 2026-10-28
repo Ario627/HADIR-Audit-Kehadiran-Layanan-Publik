@@ -1,4 +1,7 @@
 import { auditStub } from '../../test-support/audit.stub';
+import type { UploadsService } from '../uploads/uploads.service';
+import type { Transaction } from '../../db/client';
+import type { TransactionRunner } from '../../db/transaction-runner';
 import type { ReportDetail } from '@hadir/contracts';
 import type { DeviceIdentity } from '../../common/http/request-context';
 import type {
@@ -11,13 +14,11 @@ import type {
   ReportRow,
   ReportsRepository,
 } from '../../db/repositories/reports.repository';
-import {
-  ReportsService,
-  assertUsableText,
-  sanitizeNote,
-  sanitizeText,
-  statusAfterClosure,
-} from './reports.service';
+import { assertUsableText, sanitizeNote, sanitizeText } from './reports.text';
+import { statusAfterClosure } from './reports.mapper';
+import { ReportsService } from './reports.service';
+
+const passthroughRunner: TransactionRunner = async (work) => work({} as Transaction);
 
 const STOP_ID = '0192f0c4-0000-7000-8000-0000000000aa';
 const REPORT_ID = '0192f0c4-0000-7000-8000-0000000000ab';
@@ -65,6 +66,8 @@ interface CallLog {
 }
 
 interface Overrides {
+  uploads?: Partial<Pick<UploadsService, 'claimForReport'>>;
+
   stop?: { id: string; code: string; name: string; status: 'active' | 'inactive'; cityId: string } | null;
   lockedStatus?: ReportRow['status'];
   lockedDevice?: string;
@@ -134,8 +137,19 @@ function buildService(overrides: Overrides = {}): {
   const devices = {
     findByHash: async () => ({ id: 'd1', trustScore: 0.5, revokedAt: null }),
   } as unknown as DevicesRepository;
+  const uploads = {
+    claimForReport: async () => undefined,
+    ...(overrides.uploads ?? {}),
+  } as unknown as UploadsService;
   return {
-    service: new ReportsService(repositoryDouble(log, overrides), devices, idempotency, auditStub()),
+    service: new ReportsService(
+      repositoryDouble(log, overrides),
+      devices,
+      idempotency,
+      auditStub(),
+      passthroughRunner,
+      uploads,
+    ),
     log,
   };
 }
@@ -216,31 +230,43 @@ describe('ReportsService.create', () => {
     expect(result.report.publicId).toMatch(/^LPR-\d{4}-\d{6}$/);
   });
 
-  it('does not store the contact email and says so', async () => {
+  it('stores the contact email only as ciphertext and a keyed hash', async () => {
     const { service, log } = buildService();
 
-    const result = await service.create(
-      createInput({ contactEmail: 'warga@example.com' }),
-      KEY,
-      DEVICE,
-      CONTEXT,
-    );
+    await service.create(createInput({ contactEmail: 'warga@example.com' }), KEY, DEVICE, CONTEXT);
 
-    expect(result.warnings).toContain('contact_email_ignored');
+    const stored = log.inserted[0] as { contactEmailEnc?: Buffer | null; contactEmailHash?: Buffer | null };
+    expect(Buffer.isBuffer(stored.contactEmailEnc)).toBe(true);
+    expect(Buffer.isBuffer(stored.contactEmailHash)).toBe(true);
+    expect(stored.contactEmailEnc?.toString('utf8') ?? '').not.toContain('warga');
+    expect(stored.contactEmailHash).toHaveLength(32);
     expect(JSON.stringify(log.inserted)).not.toContain('warga@example.com');
   });
 
-  it('does not accept a photo reference before uploads exist', async () => {
+  it('rejects a malformed contact email instead of silently dropping it', async () => {
     const { service, log } = buildService();
 
-    const result = await service.create(
-      createInput({ photoUploadId: '0192f0c4-0000-7000-8000-0000000000cc' }),
-      KEY,
-      DEVICE,
-      CONTEXT,
-    );
+    await expect(
+      service.create(createInput({ contactEmail: 'bukan-email' }), KEY, DEVICE, CONTEXT),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect(log.inserted).toHaveLength(0);
+  });
 
-    expect(result.warnings).toContain('photo_upload_ignored');
+  it('claims a photo inside the same transaction as the report', async () => {
+    const claimed: { uploadId: string; reportId: string; deviceHash: string }[] = [];
+    const { service, log } = buildService({
+      uploads: {
+        claimForReport: async (_tx, uploadId, reportId, deviceHash) => {
+          claimed.push({ uploadId, reportId, deviceHash });
+        },
+      },
+    });
+
+    const uploadId = '0192f0c4-0000-7000-8000-0000000000cc';
+    const result = await service.create(createInput({ photoUploadId: uploadId }), KEY, DEVICE, CONTEXT);
+
+    expect(claimed).toEqual([{ uploadId, reportId: expect.any(String), deviceHash: DEVICE.hash }]);
+    expect(result.warnings).toContain('photo_pending_review');
     expect(log.inserted[0]).not.toHaveProperty('photoUploadId');
   });
 

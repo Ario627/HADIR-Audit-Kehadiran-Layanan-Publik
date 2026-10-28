@@ -12,6 +12,7 @@ export interface EvidenceRow {
   sourceUrl: string | null;
   retrievedAt: Date;
   matchScore: number | null;
+  reportPublicId: string | null;
 }
 
 export interface AuthorityRow {
@@ -79,6 +80,10 @@ function mapEvidence(raw: Record<string, unknown>): EvidenceRow | null {
     sourceUrl: typeof raw.source_url === 'string' ? raw.source_url : null,
     retrievedAt,
     matchScore: toNumber(raw.match_score),
+    reportPublicId:
+      typeof raw.report_public_id === 'string' && raw.report_public_id.length > 0
+        ? raw.report_public_id
+        : null,
   };
 }
 
@@ -126,7 +131,8 @@ export class TriageRepository {
     routeId: string | null,
   ): Promise<EvidenceRow[]> {
     const result = await this.db.execute(sql`
-      SELECT id, claim, tier::text AS tier, source_url, retrieved_at, match_score
+      SELECT id, claim, tier::text AS tier, source_url, retrieved_at, match_score,
+             payload->>'reportPublicId' AS report_public_id
       FROM evidence_items
       WHERE tier IN ('T1', 'T2')
         AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)

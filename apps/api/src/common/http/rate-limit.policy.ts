@@ -43,6 +43,12 @@ export const RATE_LIMIT_POLICIES = {
     windowMs: 3_600_000,
     scope: 'user',
   },
+  partnerPassword: {
+    name: 'partner-password',
+    limit: 5,
+    windowMs: 3_600_000,
+    scope: 'user',
+  },
   partnerOtp: {
     name: 'partner-otp',
     limit: 5,

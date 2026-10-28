@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { AppError } from '../errors/app-error';
 import { canonicalJson } from '../utils/canonical-json';
-import { withTransaction, type Transaction } from '../../db/client';
+import { withTransaction, type Transaction, type TransactionContext } from '../../db/client';
 import { IdempotencyRepository } from './idempotency.repository';
 
 export interface IdempotencyInput {
@@ -11,10 +11,7 @@ export interface IdempotencyInput {
   ttlMs: number;
 }
 
-export interface IdempotencyContext {
-  requestId?: string;
-  deviceHash?: string;
-}
+export type IdempotencyContext = TransactionContext;
 
 export interface IdempotentWorkResult<T> {
   status: number;
@@ -27,7 +24,7 @@ export interface IdempotentResult<T> {
   replayed: boolean;
 }
 
-const SCOPE_PATTERN = /^[a-z][a-z0-9._-]{2,79}$/;
+const SCOPE_PATTERN = /^[a-z][a-z0-9._-]{2,159}$/;
 const KEY_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
 const MIN_TTL_MS = 60_000;
 const MAX_TTL_MS = 7 * 24 * 60 * 60 * 1000;

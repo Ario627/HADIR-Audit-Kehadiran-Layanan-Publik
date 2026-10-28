@@ -27,6 +27,7 @@ export const TriageEvidence = z.object({
   retrievedAt: IsoDateTime,
   matchScore: z.number().min(0).max(1).nullable(),
   label: z.string().min(1).max(80),
+  targetPublicId: z.string().min(6).max(40).nullable(),
 });
 
 export const TriageAction = z.object({

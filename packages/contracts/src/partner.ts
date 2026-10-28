@@ -102,3 +102,16 @@ export const PartnerInboxQuery = z
   .strict();
 
 export type PartnerInboxQuery = z.infer<typeof PartnerInboxQuery>;
+
+export const PartnerPasswordChange = z
+  .object({
+    currentPassword: z.string().min(1).max(256),
+    newPassword: z.string().min(12).max(256),
+  })
+  .strict()
+  .refine((value) => value.currentPassword !== value.newPassword, {
+    message: 'Kata sandi baru harus berbeda dari yang lama.',
+    path: ['newPassword'],
+  });
+
+export type PartnerPasswordChange = z.infer<typeof PartnerPasswordChange>;

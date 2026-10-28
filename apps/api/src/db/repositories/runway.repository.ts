@@ -1,11 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { RunwayEventKind, RunwayStatus } from '@hadir/contracts';
-import { asc, eq, sql, type SQL } from 'drizzle-orm';
+import { asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { Database } from '../client';
 import { DATABASE } from '../db.module';
 import { routes, runwayEvents, serviceRunway } from '../schema';
 
 export interface RunwayRow {
+  runwayId: string;
   routeId: string;
   routeCode: string;
   routeName: string;
@@ -31,6 +32,7 @@ export interface RunwayFilter {
 }
 
 const runwaySelection = {
+  runwayId: serviceRunway.id,
   routeId: serviceRunway.routeId,
   routeCode: routes.code,
   routeName: routes.name,
@@ -93,12 +95,40 @@ export class RunwayRepository {
       .limit(200);
   }
 
-  async findRunwayIdByRoute(routeId: string): Promise<string | null> {
+  async listEventsForRunways(
+    runwayIds: readonly string[],
+  ): Promise<Map<string, RunwayEventRow[]>> {
+    const grouped = new Map<string, RunwayEventRow[]>();
+    if (runwayIds.length === 0) {
+      return grouped;
+    }
     const rows = await this.db
-      .select({ id: serviceRunway.id })
-      .from(serviceRunway)
-      .where(eq(serviceRunway.routeId, routeId))
-      .limit(1);
-    return rows[0]?.id ?? null;
+      .select({
+        runwayId: runwayEvents.runwayId,
+        seq: runwayEvents.seq,
+        kind: runwayEvents.kind,
+        note: runwayEvents.note,
+        sourceUrl: runwayEvents.sourceUrl,
+        occurredAt: runwayEvents.occurredAt,
+      })
+      .from(runwayEvents)
+      .where(inArray(runwayEvents.runwayId, [...runwayIds]))
+      .orderBy(asc(runwayEvents.runwayId), asc(runwayEvents.seq));
+    for (const row of rows) {
+      const bucket = grouped.get(row.runwayId);
+      const event: RunwayEventRow = {
+        seq: row.seq,
+        kind: row.kind,
+        note: row.note,
+        sourceUrl: row.sourceUrl,
+        occurredAt: row.occurredAt,
+      };
+      if (bucket === undefined) {
+        grouped.set(row.runwayId, [event]);
+      } else if (bucket.length < 200) {
+        bucket.push(event);
+      }
+    }
+    return grouped;
   }
 }

@@ -88,6 +88,14 @@ const BY_CODE = new Map<string, ErrorMessage>([
     },
   ],
   [
+    'FORBIDDEN',
+    {
+      title: 'Akses ditolak',
+      detail: 'Perangkat ini diblokir untuk tindakan tersebut. Coba dari perangkat lain.',
+      action: 'none',
+    },
+  ],
+  [
     'NETWORK_ERROR',
     {
       title: 'Tidak bisa menghubungi server',

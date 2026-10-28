@@ -12,9 +12,11 @@ import {
   closeDatabase,
   db,
   poolStats,
+  withTransaction,
   type DatabaseHealth,
   type PoolStats,
 } from './client';
+import { TRANSACTION_RUNNER } from './transaction-runner';
 
 export const DATABASE = Symbol('DATABASE');
 
@@ -58,7 +60,8 @@ export class DbLifecycle implements OnModuleInit, OnApplicationShutdown {
     DbHealthService,
     DbLifecycle,
     { provide: DATABASE, useValue: db },
+    { provide: TRANSACTION_RUNNER, useValue: withTransaction },
   ],
-  exports: [DATABASE, DbHealthService],
+  exports: [DATABASE, DbHealthService, TRANSACTION_RUNNER],
 })
 export class DbModule {}

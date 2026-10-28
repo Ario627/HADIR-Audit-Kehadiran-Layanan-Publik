@@ -1,0 +1,27 @@
+{
+  "name": "HADIR — Audit Kehadiran Layanan",
+  "short_name": "HADIR",
+  "lang": "id",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f2eee3",
+  "theme_color": "#f2eee3",
+  "description": "Mengukur lama tunggu penumpang bus bersubsidi dan mengubahnya menjadi bukti yang bisa ditindaklanjuti.",
+  "icons": [
+    {
+      "src": "/icons/maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

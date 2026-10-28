@@ -16,6 +16,7 @@ export interface MaintenanceOptions {
 export interface MaintenanceSummary {
   idempotencyRemoved: number;
   episodesReaped: number;
+  credentialsRemoved: number;
   failures: number;
 }
 
@@ -57,10 +58,15 @@ export class MaintenanceWorker {
     );
   }
 
+  private async pruneCredentials(): Promise<number> {
+    return this.repository.drainExpiredCredentials(this.options.prune);
+  }
+
   async runOnce(): Promise<MaintenanceSummary> {
     const summary: MaintenanceSummary = {
       idempotencyRemoved: 0,
       episodesReaped: 0,
+      credentialsRemoved: 0,
       failures: 0,
     };
 
@@ -82,9 +88,22 @@ export class MaintenanceWorker {
       );
     }
 
-    if (summary.idempotencyRemoved > 0 || summary.episodesReaped > 0) {
+    try {
+      summary.credentialsRemoved = await this.pruneCredentials();
+    } catch (error) {
+      summary.failures += 1;
+      this.logger.warn(
+        `Pembersihan kredensial kedaluwarsa gagal: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    if (
+      summary.idempotencyRemoved > 0 ||
+      summary.episodesReaped > 0 ||
+      summary.credentialsRemoved > 0
+    ) {
       this.logger.log(
-        `Pemeliharaan: ${summary.idempotencyRemoved} kunci idempotency, ${summary.episodesReaped} episode ditutup`,
+        `Pemeliharaan: ${summary.idempotencyRemoved} kunci idempotency, ${summary.episodesReaped} episode ditutup, ${summary.credentialsRemoved} kredensial kedaluwarsa`,
       );
     }
 

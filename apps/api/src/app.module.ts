@@ -18,6 +18,7 @@ import { TriageModule } from './modules/triage/triage.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { RunwayModule } from './modules/runway/runway.module';
 import { PartnerModule } from './modules/partner/partner.module';
+import { UploadsModule } from './modules/uploads/uploads.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { PartnerModule } from './modules/partner/partner.module';
     ReportsModule,
     RunwayModule,
     PartnerModule,
+    UploadsModule,
   ],
   controllers: [AppController, HealthController, MetaController],
   providers: [

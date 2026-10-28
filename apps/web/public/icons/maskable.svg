@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="HADIR">
+  <rect width="512" height="512" fill="#f2eee3"/>
+  <rect x="96" y="112" width="320" height="28" fill="#f2b705"/>
+  <text x="256" y="332" text-anchor="middle" font-family="Archivo, Verdana, sans-serif" font-size="168" font-weight="800" letter-spacing="-6" fill="#15160f">HD</text>
+  <rect x="96" y="372" width="320" height="20" fill="#15160f"/>
+</svg>

@@ -44,6 +44,27 @@ export const ReportEvent = z.object({
   createdAt: IsoDateTime,
 });
 
+export const UploadPurpose = z.enum(['report_photo', 'closure_evidence']);
+
+export const UploadRequest = z
+  .object({
+    contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+    size: z.number().int().min(1).max(5 * 1024 * 1024),
+    purpose: UploadPurpose,
+  })
+  .strict();
+
+export const UploadTicket = z.object({
+  uploadId: Uuid,
+  url: z.string().min(1).max(200),
+  method: z.literal('PUT'),
+  headers: z.record(z.string(), z.string()),
+  expiresAt: IsoDateTime,
+});
+
+export type UploadRequest = z.infer<typeof UploadRequest>;
+export type UploadTicket = z.infer<typeof UploadTicket>;
+
 export const ReportListItem = z.object({
   publicId: z.string().min(6).max(40),
   category: ReportCategory,

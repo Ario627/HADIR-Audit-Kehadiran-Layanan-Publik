@@ -15,19 +15,20 @@ import type { Request } from 'express';
 import { PartnerActionInput, PartnerInboxQuery } from '@hadir/contracts';
 import { RateLimit, RATE_LIMIT_POLICIES } from '../../common/http/rate-limit.policy';
 import { contextOf, requestIdOf } from '../../common/http/request-context';
+import { transactionContextFor } from '../../common/http/transaction-context';
 import { parseOrThrow } from '../../common/http/zod';
 import { PartnerOnly } from '../../common/auth/roles.decorator';
 import { SessionGuard, partnerSessionOf } from '../../common/auth/session.guard';
 import { ok } from '../../common/http/envelope';
 import { idempotencyKeyOf } from '../../common/http/idempotency-key';
-import { ReportsService } from '../reports/reports.service';
+import { PartnerReportsService } from './partner-reports.service';
 
 const NO_STORE = 'no-store, private, max-age=0';
 
-@Controller('v1/partner/reports')
+@Controller('partner/reports')
 @UseGuards(SessionGuard)
 export class PartnerReportsController {
-  constructor(private readonly reports: ReportsService) {}
+  constructor(private readonly reports: PartnerReportsService) {}
 
   @Get()
   @Header('Cache-Control', NO_STORE)
@@ -59,12 +60,13 @@ export class PartnerReportsController {
     @Req() request: Request,
   ) {
     const input = parseOrThrow(PartnerActionInput, body);
-    const context = contextOf(request);
-    const session = partnerSessionOf(request);
-    const result = await this.reports.partnerAction(publicId, input, idempotencyKeyOf(request), session, {
-      requestId: context.requestId,
-      deviceHash: session.userId,
-    });
+    const result = await this.reports.act(
+      publicId,
+      input,
+      idempotencyKeyOf(request),
+      partnerSessionOf(request),
+      transactionContextFor(contextOf(request)),
+    );
     return ok(result, requestIdOf(request));
   }
 }

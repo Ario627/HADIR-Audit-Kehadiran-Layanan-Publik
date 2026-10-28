@@ -1,20 +1,23 @@
 import { auditStub } from '../../test-support/audit.stub';
+import type { Transaction } from '../../db/client';
+import type { TransactionRunner } from '../../db/transaction-runner';
 import type { PartnerSession } from '../../common/auth/partner-session';
 import type {
   IdempotencyContext,
   IdempotencyService,
 } from '../../common/idempotency/idempotency.service';
-import type { DevicesRepository } from '../../db/repositories/devices.repository';
 import type {
   ReportsRepository,
   StoredReportStatus,
 } from '../../db/repositories/reports.repository';
 import {
-  ReportsService,
   allowedPartnerActions,
   eventKindForAction,
   partnerTransition,
-} from './reports.service';
+} from './reports.partner-machine';
+import { PartnerReportsService } from '../partner/partner-reports.service';
+
+const passthroughRunner: TransactionRunner = async (work) => work({} as Transaction);
 
 const PUBLIC_ID = 'LPR-2026-004242';
 const REPORT_ID = '0192f0c4-0000-7000-8000-0000000000ab';
@@ -80,7 +83,7 @@ function repositoryDouble(status: StoredReportStatus, log: CallLog): ReportsRepo
   } as unknown as ReportsRepository;
 }
 
-function buildService(status: StoredReportStatus): { service: ReportsService; log: CallLog } {
+function buildService(status: StoredReportStatus): { service: PartnerReportsService; log: CallLog } {
   const log: CallLog = { statusWrites: [], events: [] };
   const idempotency = {
     execute: async (
@@ -91,11 +94,13 @@ function buildService(status: StoredReportStatus): { service: ReportsService; lo
       return { status: result.status, body: result.body, replayed: false };
     },
   } as unknown as IdempotencyService;
-  const devices = {
-    findByHash: async () => ({ id: 'd1', trustScore: 0.5, revokedAt: null }),
-  } as unknown as DevicesRepository;
   return {
-    service: new ReportsService(repositoryDouble(status, log), devices, idempotency, auditStub()),
+    service: new PartnerReportsService(
+      repositoryDouble(status, log),
+      idempotency,
+      auditStub(),
+      passthroughRunner,
+    ),
     log,
   };
 }
@@ -140,11 +145,11 @@ describe('partnerTransition', () => {
   });
 });
 
-describe('ReportsService.partnerAction', () => {
+describe('PartnerReportsService.act', () => {
   it('moves a submitted report to acknowledged', async () => {
     const { service, log } = buildService('submitted');
 
-    const result = await service.partnerAction(
+    const result = await service.act(
       PUBLIC_ID,
       { action: 'acknowledge', note: 'Kami periksa minggu ini.' },
       KEY,
@@ -160,7 +165,7 @@ describe('ReportsService.partnerAction', () => {
   it('marks the event as simulated so it is never mistaken for a real partner', async () => {
     const { service, log } = buildService('submitted');
 
-    await service.partnerAction(
+    await service.act(
       PUBLIC_ID,
       { action: 'acknowledge' },
       KEY,
@@ -175,7 +180,7 @@ describe('ReportsService.partnerAction', () => {
   it('records the transition source and target', async () => {
     const { service, log } = buildService('acknowledged');
 
-    await service.partnerAction(
+    await service.act(
       PUBLIC_ID,
       { action: 'claim_resolved', note: 'Atap sudah ditambal pagi ini.' },
       KEY,
@@ -194,7 +199,7 @@ describe('ReportsService.partnerAction', () => {
     const { service, log } = buildService('submitted');
 
     await expect(
-      service.partnerAction(
+      service.act(
         PUBLIC_ID,
         { action: 'claim_resolved', note: 'cukup panjang' },
         KEY,
@@ -209,7 +214,7 @@ describe('ReportsService.partnerAction', () => {
     const { service } = buildService('verified_resolved');
 
     await expect(
-      service.partnerAction(PUBLIC_ID, { action: 'acknowledge' }, KEY, SESSION, CONTEXT),
+      service.act(PUBLIC_ID, { action: 'acknowledge' }, KEY, SESSION, CONTEXT),
     ).rejects.toMatchObject({
       code: 'INVALID_TRANSITION',
       errors: [{ field: 'action', code: 'not_allowed' }],
@@ -219,7 +224,7 @@ describe('ReportsService.partnerAction', () => {
   it('keeps resolvedAt empty until a citizen verifies', async () => {
     const { service, log } = buildService('acknowledged');
 
-    await service.partnerAction(
+    await service.act(
       PUBLIC_ID,
       { action: 'claim_resolved', note: 'Sudah diperbaiki kemarin.' },
       KEY,
@@ -234,7 +239,7 @@ describe('ReportsService.partnerAction', () => {
     const { service, log } = buildService('submitted');
 
     await expect(
-      service.partnerAction(
+      service.act(
         PUBLIC_ID,
         { action: 'acknowledge' },
         KEY,
@@ -256,19 +261,16 @@ describe('ReportsService.partnerAction', () => {
         return { status: result.status, body: result.body, replayed: false };
       },
     } as unknown as IdempotencyService;
-    const devices = {
-      findByHash: async () => ({ id: 'd1', trustScore: 0.5, revokedAt: null }),
-    } as unknown as DevicesRepository;
     const repository = {
       findReportIdInInstitution: async () => null,
       lockReportInInstitution: async () => null,
       updateStatus: async () => undefined,
       appendEvent: async () => 1,
     } as unknown as ReportsRepository;
-    const service = new ReportsService(repository, devices, idempotency, auditStub());
+    const service = new PartnerReportsService(repository, idempotency, auditStub(), passthroughRunner);
 
     await expect(
-      service.partnerAction(PUBLIC_ID, { action: 'acknowledge' }, KEY, SESSION, CONTEXT),
+      service.act(PUBLIC_ID, { action: 'acknowledge' }, KEY, SESSION, CONTEXT),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     expect(log.statusWrites).toEqual([]);
   });

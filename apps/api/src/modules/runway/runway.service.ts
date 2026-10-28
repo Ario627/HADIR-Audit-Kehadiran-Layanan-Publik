@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Runway, RunwayListQuery, RunwayStatus } from '@hadir/contracts';
+import { MemoCache } from '../../common/cache/memo-cache';
 import { env } from '../../common/config/env';
 import { AppError } from '../../common/errors/app-error';
 import {
@@ -18,68 +19,6 @@ import {
 
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 512;
-
-interface CacheEntry<T> {
-  value: T;
-  expiresAt: number;
-}
-
-class RunwayCache<T> {
-  private readonly entries = new Map<string, CacheEntry<T>>();
-  private readonly pending = new Map<string, Promise<T>>();
-
-  constructor(
-    private readonly ttlMs: number,
-    private readonly maxEntries: number,
-  ) {}
-
-  private read(key: string): T | null {
-    const entry = this.entries.get(key);
-    if (entry === undefined) {
-      return null;
-    }
-    if (entry.expiresAt <= Date.now()) {
-      this.entries.delete(key);
-      return null;
-    }
-    this.entries.delete(key);
-    this.entries.set(key, entry);
-    return entry.value;
-  }
-
-  private write(key: string, value: T): void {
-    this.entries.delete(key);
-    this.entries.set(key, { value, expiresAt: Date.now() + this.ttlMs });
-    while (this.entries.size > this.maxEntries) {
-      const oldest = this.entries.keys().next();
-      if (oldest.done === true) {
-        break;
-      }
-      this.entries.delete(oldest.value);
-    }
-  }
-
-  async getOrLoad(key: string, load: () => Promise<T>): Promise<T> {
-    const cached = this.read(key);
-    if (cached !== null) {
-      return cached;
-    }
-    const inFlight = this.pending.get(key);
-    if (inFlight !== undefined) {
-      return inFlight;
-    }
-    const promise = load()
-      .then((value) => {
-        this.write(key, value);
-        return value;
-      })
-      .finally(() => {
-        this.pending.delete(key);
-      });
-    this.pending.set(key, promise);
-    return promise;
-  }
-}
 
 export function mapEvent(row: RunwayEventRow): Runway['events'][number] {
   return {
@@ -136,8 +75,14 @@ function withinFilter(runway: Runway, query: RunwayListQuery): boolean {
 
 @Injectable()
 export class RunwayService {
-  private readonly cache = new RunwayCache<Runway | null>(CACHE_TTL_MS, CACHE_MAX_ENTRIES);
-  private readonly listCache = new RunwayCache<Runway[]>(CACHE_TTL_MS, 128);
+  private readonly cache = new MemoCache<Runway | null>({
+    ttlMs: CACHE_TTL_MS,
+    maxEntries: CACHE_MAX_ENTRIES,
+  });
+  private readonly listCache = new MemoCache<Runway[]>({
+    ttlMs: CACHE_TTL_MS,
+    maxEntries: 128,
+  });
 
   constructor(private readonly repository: RunwayRepository) {}
 
@@ -146,8 +91,7 @@ export class RunwayService {
     if (row === null) {
       return null;
     }
-    const runwayId = await this.repository.findRunwayIdByRoute(routeId);
-    const events = runwayId === null ? [] : await this.repository.listEvents(runwayId);
+    const events = await this.repository.listEvents(row.runwayId);
     return toRunway(row, events, today, simulated);
   }
 
@@ -180,13 +124,12 @@ export class RunwayService {
         status: query.status ?? null,
         limit: 100,
       });
-      const output: Runway[] = [];
-      for (const row of rows) {
-        const runwayId = await this.repository.findRunwayIdByRoute(row.routeId);
-        const events = runwayId === null ? [] : await this.repository.listEvents(runwayId);
-        output.push(toRunway(row, events, today, simulated));
-      }
-      return output;
+      const grouped = await this.repository.listEventsForRunways(
+        rows.map((row) => row.runwayId),
+      );
+      return rows.map((row) =>
+        toRunway(row, grouped.get(row.runwayId) ?? [], today, simulated),
+      );
     });
     return items.filter((item) => withinFilter(item, query)).slice(0, query.limit);
   }

@@ -21,6 +21,7 @@ import {
 import { ok } from '../../common/http/envelope';
 import { idempotencyKeyOf } from '../../common/http/idempotency-key';
 import { contextOf, deviceOf, requestIdOf } from '../../common/http/request-context';
+import { transactionContextFor } from '../../common/http/transaction-context';
 import { RateLimit, RATE_LIMIT_POLICIES } from '../../common/http/rate-limit.policy';
 import { parseOrThrow } from '../../common/http/zod';
 import { ReportsService } from './reports.service';
@@ -45,10 +46,7 @@ export class ReportsController {
     const key = idempotencyKeyOf(request);
     const device = deviceOf(request);
     const context = contextOf(request);
-    const result = await this.reports.create(input, key, device, {
-      requestId: context.requestId,
-      deviceHash: device.hash,
-    });
+    const result = await this.reports.create(input, key, device, transactionContextFor(context));
     return ok(result, requestIdOf(request));
   }
 
@@ -107,10 +105,7 @@ export class ReportsController {
     const key = idempotencyKeyOf(request);
     const device = deviceOf(request);
     const context = contextOf(request);
-    const result = await this.reports.corroborate(publicId, input, key, device, {
-      requestId: context.requestId,
-      deviceHash: device.hash,
-    });
+    const result = await this.reports.corroborate(publicId, input, key, device, transactionContextFor(context));
     return ok(result, requestIdOf(request));
   }
 
@@ -127,10 +122,7 @@ export class ReportsController {
     const key = idempotencyKeyOf(request);
     const device = deviceOf(request);
     const context = contextOf(request);
-    const result = await this.reports.verifyClosure(publicId, input, key, device, {
-      requestId: context.requestId,
-      deviceHash: device.hash,
-    });
+    const result = await this.reports.verifyClosure(publicId, input, key, device, transactionContextFor(context));
     return ok(result, requestIdOf(request));
   }
 

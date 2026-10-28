@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const DEV_SESSION_SECRET = 'dev-only-insecure-secret-change-me-0000000000';
+const DEV_CONTACT_KEY = Buffer.alloc(32, 11).toString('base64');
 const DEV_REDIS_URL = 'redis://localhost:6379';
 
 const DatabaseUrl = z
@@ -32,6 +33,8 @@ const EnvSchema = z.object({
   DATABASE_URL: DatabaseUrl.default('postgres://hadir:hadir@localhost:5432/hadir'),
   REDIS_URL: z.string().min(1).default(DEV_REDIS_URL),
   QR_KEYRING_JSON: z.string().optional(),
+  CONTACT_ENCRYPTION_KEY: z.string().default(DEV_CONTACT_KEY),
+  UPLOAD_ROOT: z.string().min(1).max(500).default('.uploads'),
   DEV_TOOLS: z.enum(['true', 'false']).default('false'),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(16).default(0),
   BODY_LIMIT: z.string().min(1).default('256kb'),
@@ -128,6 +131,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
   if (value.NODE_ENV === 'production' && value.SESSION_SECRET === DEV_SESSION_SECRET) {
     throw new Error('SESSION_SECRET wajib diisi dengan secret nyata di production.');
   }
+  if (value.NODE_ENV === 'production' && value.CONTACT_ENCRYPTION_KEY === DEV_CONTACT_KEY) {
+    throw new Error('CONTACT_ENCRYPTION_KEY wajib diisi dengan kunci nyata di production.');
+  }
   if (value.NODE_ENV === 'production' && value.DEV_TOOLS === 'true') {
     throw new Error('DEV_TOOLS tidak boleh aktif di production.');
   }
@@ -173,6 +179,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
     episodeIdleMinutes: value.EPISODE_IDLE_MINUTES,
     episodeMaxMinutes: value.EPISODE_MAX_MINUTES,
     qrKeyringJson: value.QR_KEYRING_JSON?.trim() || null,
+    contactEncryptionKey: value.CONTACT_ENCRYPTION_KEY.trim(),
+    uploadRoot: value.UPLOAD_ROOT,
     dbSslCa: value.DB_SSL_CA?.trim() || null,
     migrationDatabaseUrl: value.MIGRATION_DATABASE_URL?.trim() || null,
   });

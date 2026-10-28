@@ -115,8 +115,8 @@ export class PartnerRepository {
     };
   }
 
-  async createSession(input: CreateSessionInput): Promise<void> {
-    await this.db.execute(sql`
+  async createSession(input: CreateSessionInput): Promise<boolean> {
+    const result = await this.db.execute(sql`
       INSERT INTO partner_sessions (
         user_id, membership_id, token_hash, invite_jti, expires_at, ip_hash, user_agent_hash
       )
@@ -124,7 +124,10 @@ export class PartnerRepository {
         ${input.userId}, ${input.membershipId}, ${input.tokenHash}, ${input.inviteJti},
         ${input.expiresAt}, ${input.ipHash}, ${input.userAgentHash}
       )
+      ON CONFLICT (invite_jti) DO NOTHING
+      RETURNING id
     `);
+    return result.rows.length === 1;
   }
 
   async findSessionByTokenHash(tokenHash: Buffer): Promise<PartnerSession | null> {
@@ -145,6 +148,8 @@ export class PartnerRepository {
       JOIN partner_memberships m ON m.id = s.membership_id
       JOIN institutions i ON i.id = m.institution_id
       WHERE s.token_hash = ${tokenHash}
+        AND s.revoked_at IS NULL
+        AND s.expires_at > now()
         AND m.revoked_at IS NULL
         AND u.status = 'active'
       LIMIT 1
@@ -165,6 +170,18 @@ export class PartnerRepository {
       SET revoked_at = ${now}
       WHERE id = ${sessionId} AND revoked_at IS NULL
     `);
+  }
+
+  async revokeOthersForUser(userId: string, keepSessionId: string, now: Date): Promise<number> {
+    const result = await this.db.execute(sql`
+      UPDATE partner_sessions
+      SET revoked_at = ${now}
+      WHERE user_id = ${userId}
+        AND id <> ${keepSessionId}
+        AND revoked_at IS NULL
+      RETURNING 1 AS revoked
+    `);
+    return result.rows.length;
   }
 
   async revokeAllForUser(userId: string, now: Date): Promise<number> {

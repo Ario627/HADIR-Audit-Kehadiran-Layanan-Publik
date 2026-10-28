@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../../common/audit/audit.module';
 import { OTP_DELIVERY, LogOtpDelivery } from '../../common/auth/otp-delivery';
+import { IdempotencyModule } from '../../common/idempotency/idempotency.module';
 import { PartnerCredentialRepository } from '../../db/repositories/partner-credential.repository';
 import { PartnerRepository } from '../../db/repositories/partner.repository';
 import { ReportsModule } from '../reports/reports.module';
@@ -10,11 +11,12 @@ import { PartnerOtpService } from './partner-otp.service';
 import { PartnerPasskeyController } from './partner-passkey.controller';
 import { PartnerPasskeyService } from './partner-passkey.service';
 import { PartnerReportsController } from './partner-reports.controller';
+import { PartnerReportsService } from './partner-reports.service';
 import { PartnerController } from './partner.controller';
 import { PartnerService } from './partner.service';
 
 @Module({
-  imports: [AuditModule, ReportsModule],
+  imports: [AuditModule, ReportsModule, IdempotencyModule],
   controllers: [PartnerController, PartnerPasskeyController, PartnerReportsController],
   providers: [
     PartnerService,
@@ -22,6 +24,7 @@ import { PartnerService } from './partner.service';
     PartnerCredentialService,
     PartnerOtpService,
     PartnerPasskeyService,
+    PartnerReportsService,
     PartnerRepository,
     PartnerCredentialRepository,
     { provide: OTP_DELIVERY, useClass: LogOtpDelivery },

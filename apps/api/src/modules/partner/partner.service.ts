@@ -67,7 +67,7 @@ export class PartnerService {
     now: Date,
   ): Promise<IssuedSession> {
     const issued = this.auth.issueToken();
-    await this.repository.createSession({
+    const created = await this.repository.createSession({
       userId,
       membershipId: membership.id,
       tokenHash: issued.tokenHash,
@@ -76,6 +76,19 @@ export class PartnerService {
       ipHash: context.ipHash,
       userAgentHash: context.userAgentHash,
     });
+    if (!created) {
+      await this.audit.record({
+        action: 'partner.login_failed',
+        objectType: 'device',
+        objectId: userId,
+        requestId: context.requestId,
+        ipHash: context.ipHash,
+        payload: { reason: 'invite_replayed' },
+      });
+      throw new AppError('UNAUTHENTICATED', {
+        detail: 'Undangan tidak valid atau kedaluwarsa.',
+      });
+    }
     const session = await this.repository.findSessionByTokenHash(issued.tokenHash);
     if (session === null) {
       throw new AppError('INTERNAL_ERROR', { detail: 'Sesi gagal dibuat.' });
@@ -239,6 +252,42 @@ export class PartnerService {
       objectId: userId,
       requestId,
       payload: { revoked },
+    });
+    return revoked;
+  }
+
+  async changePassword(
+    session: PartnerSession,
+    currentPassword: string,
+    newPassword: string,
+    context: { requestId: string; ipHash: string | null },
+    now: Date = new Date(),
+  ): Promise<number> {
+    await this.credentials.changePassword({
+      session,
+      currentPassword,
+      newPassword,
+      requestId: context.requestId,
+      ipHash: context.ipHash,
+    });
+    const revoked = await this.repository.revokeOthersForUser(
+      session.userId,
+      session.sessionId,
+      now,
+    );
+    await this.audit.record({
+      action: 'partner.sessions_revoked',
+      objectType: 'device',
+      objectId: session.userId,
+      actor: {
+        kind: 'partner',
+        userId: session.userId,
+        institutionId: session.institutionId,
+        role: session.role,
+      },
+      requestId: context.requestId,
+      ipHash: context.ipHash,
+      payload: { revoked, reason: 'password_changed' },
     });
     return revoked;
   }

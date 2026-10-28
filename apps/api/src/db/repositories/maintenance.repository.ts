@@ -46,6 +46,38 @@ export class MaintenanceRepository {
     return total;
   }
 
+  async pruneExpiredOtp(now: Date, graceSeconds: number): Promise<number> {
+    const result = await this.db.execute(sql`
+      DELETE FROM partner_otp_challenges
+      WHERE expires_at <= ${now} - make_interval(secs => ${graceSeconds})
+      RETURNING 1 AS removed
+    `);
+    return result.rows.length;
+  }
+
+  async pruneExpiredChallenges(now: Date): Promise<number> {
+    const result = await this.db.execute(sql`
+      DELETE FROM partner_webauthn_challenges
+      WHERE expires_at <= ${now}
+      RETURNING 1 AS removed
+    `);
+    return result.rows.length;
+  }
+
+  async drainExpiredCredentials(options: PruneOptions = DEFAULT_PRUNE_OPTIONS): Promise<number> {
+    let total = 0;
+    for (let round = 0; round < options.maxRounds; round += 1) {
+      const now = new Date();
+      const otp = await this.pruneExpiredOtp(now, options.graceSeconds);
+      const challenges = await this.pruneExpiredChallenges(now);
+      total += otp + challenges;
+      if (otp + challenges < options.batchSize) {
+        return total;
+      }
+    }
+    return total;
+  }
+
   async drainStaleEpisodes(window: ReapWindow, limit: number, maxRounds: number): Promise<number> {
     let total = 0;
     for (let round = 0; round < maxRounds; round += 1) {

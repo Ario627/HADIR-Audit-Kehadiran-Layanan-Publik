@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router';
 import type { BoardRow } from '../../lib/board';
 import { evidenceOf } from '../../lib/evidence';
 import { formatMinutesShort, formatNumber } from '../../lib/time';
@@ -31,7 +32,9 @@ function StopRow({ row }: { row: BoardRow }) {
         {row.code}
       </th>
       <td role="cell" className="board-name">
-        {row.name}
+        <Link to="/s/$stopCode" params={{ stopCode: row.code }}>
+          {row.name}
+        </Link>
         <span className="board-meta">
           {row.corridors.length === 0 ? 'Koridor belum terdaftar' : row.corridors.join(' · ')}
           {row.isDemo ? ' · data simulasi' : ''}

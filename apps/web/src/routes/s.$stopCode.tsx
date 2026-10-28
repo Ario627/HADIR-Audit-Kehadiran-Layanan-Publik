@@ -3,13 +3,85 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { StatePanel } from '../components/StatePanel';
+import { EstimateBlock } from '../features/estimate/EstimateBlock';
 import { StopLead } from '../features/stop/StopLead';
 import { useStartEpisode } from '../features/wait/use-episode-actions';
 import { describeError } from '../lib/errors';
+import { readEstimateWindow, windowLabel, type EstimateWindow } from '../lib/estimate';
 import { writeStoredEpisode } from '../lib/episode-storage';
 import { prefetchAll } from '../lib/prefetch';
 import { readQrProof, readQrSearch, readStopCode, type QrSearchInput } from '../lib/qr';
-import { activeEpisodeQuery, qrLandingQuery, stopsQuery } from '../lib/queries';
+import { activeEpisodeQuery, estimateQuery, qrLandingQuery, stopsQuery } from '../lib/queries';
+
+function EstimateSection({
+  stopId,
+  period,
+  routeId,
+}: {
+  stopId: string;
+  period: EstimateWindow;
+  routeId: string | null;
+}) {
+  const query = useQuery(estimateQuery(stopId, period, routeId));
+
+  if (query.isPending) {
+    return <StatePanel title="Menghitung estimasi">Mengambil catatan tunggu pada jendela ini.</StatePanel>;
+  }
+
+  if (query.isError) {
+    const message = describeError(query.error);
+    return (
+      <>
+        <StatePanel tone="error" title={message.title}>
+          {message.detail}
+        </StatePanel>
+        <div className="actions">
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => {
+              void query.refetch();
+            }}
+          >
+            Coba hitung lagi
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  return <EstimateBlock estimate={query.data} simulatedHint={false} />;
+}
+
+function WindowSwitch({ current }: { current: EstimateWindow }) {
+  const options: readonly EstimateWindow[] = ['7d', '30d'];
+  return (
+    <nav className="window-switch" aria-label="Jendela waktu estimasi">
+      {options.map((option) => (
+        <Link
+          key={option}
+          to="."
+          search={(previous: Record<string, unknown>) => {
+            const next: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(previous)) {
+              if (key !== 'w') {
+                next[key] = value;
+              }
+            }
+            if (option === '30d') {
+              next.w = option;
+            }
+            return next;
+          }}
+          className={option === current ? 'window-option is-active' : 'window-option'}
+          aria-current={option === current ? 'true' : undefined}
+        >
+          {windowLabel(option)}
+        </Link>
+      ))}
+    </nav>
+  );
+}
 
 function QrLandingPage() {
   const params = Route.useParams();
@@ -18,6 +90,7 @@ function QrLandingPage() {
   const queryClient = useQueryClient();
   const code = readStopCode(params.stopCode);
   const proof = readQrProof(search);
+  const period = readEstimateWindow(search.w);
   const [routeId, setRouteId] = useState<string | null>(null);
 
   const active = useQuery(activeEpisodeQuery());
@@ -164,6 +237,9 @@ function QrLandingPage() {
         eyebrow="Halte"
       />
 
+      <WindowSwitch current={period} />
+      <EstimateSection stopId={stop.id} period={period} routeId={routeId} />
+
       {qrErrorMessage === null ? (
         <p className="note">
           {verified
@@ -226,10 +302,27 @@ export const Route = createFileRoute('/s/$stopCode')({
     }
     const active = context.queryClient.ensureQueryData(activeEpisodeQuery());
     if (readQrProof(deps) !== null) {
-      await prefetchAll(active, context.queryClient.ensureQueryData(qrLandingQuery(code, deps)));
+      const landing = context.queryClient.ensureQueryData(qrLandingQuery(code, deps));
+      const estimate = landing.then((data) =>
+        context.queryClient.ensureQueryData(
+          estimateQuery(data.stop.id, readEstimateWindow(deps.w), null),
+        ),
+      );
+      await prefetchAll(active, landing, estimate);
       return;
     }
-    await prefetchAll(active, context.queryClient.ensureQueryData(stopsQuery({ q: code, limit: 10 })));
+    const stops = context.queryClient.ensureQueryData(stopsQuery({ q: code, limit: 10 }));
+    const estimate = (async () => {
+      const data = await stops;
+      const stop = data.items.find((item) => item.code === code);
+      if (stop === undefined) {
+        return;
+      }
+      await context.queryClient.ensureQueryData(
+        estimateQuery(stop.id, readEstimateWindow(deps.w), null),
+      );
+    })();
+    await prefetchAll(active, stops, estimate);
   },
   component: QrLandingPage,
 });

@@ -98,6 +98,7 @@ export function toEvidence(row: EvidenceRow): TriageEvidence {
     retrievedAt: row.retrievedAt.toISOString(),
     matchScore: row.matchScore,
     label: possibleMatch(ref) ? 'mungkin terkait' : 'terkait',
+    targetPublicId: possibleMatch(ref) ? row.reportPublicId : null,
   };
 }
 

@@ -28,6 +28,8 @@ function RootLayout() {
         <p>HADIR · bukti tunggu bus bersubsidi</p>
         <p>
           <Link to="/metodologi">Cara angka ini dihitung</Link>
+          {' · '}
+          <Link to="/privasi">Privasi &amp; data saya</Link>
         </p>
       </footer>
     </>

@@ -30,7 +30,7 @@ import { hashRequestFingerprint } from './partner.fingerprint';
 
 const NO_STORE = 'no-store, private, max-age=0';
 
-@Controller('v1/partner/passkeys')
+@Controller('partner/passkeys')
 @UseGuards(SessionGuard)
 export class PartnerPasskeyController {
   constructor(

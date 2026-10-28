@@ -1,4 +1,13 @@
-import type { CoveragePeriod, QrLanding, StopSummary } from '@hadir/contracts';
+import type {
+  CoveragePeriod,
+  Estimate,
+  QrLanding,
+  ReportDetail,
+  ReportListItem,
+  RouteStopList,
+  Runway,
+  StopSummary,
+} from '@hadir/contracts';
 import { queryOptions } from '@tanstack/react-query';
 import { apiGetChecked, apiSendChecked, withQuery } from './api';
 import {
@@ -7,12 +16,19 @@ import {
   fetchActiveEpisode,
   fetchEpisode,
 } from './episode-api';
+import type { EstimateWindow } from './estimate';
 import {
   coverageSummarySchema,
+  estimateSchema,
   methodologySchema,
   qrLandingSchema,
+  reportListSchema,
+  routeStopListSchema,
+  runwayListSchema,
+  runwaySchema,
   stopListSchema,
 } from './guards';
+import { fetchReport, reportQueryKey } from './report-api';
 import { readQrProof, type QrSearchInput } from './qr';
 
 export interface StopListInput {
@@ -103,5 +119,72 @@ export function activeEpisodeQuery() {
     queryFn: fetchActiveEpisode,
     staleTime: 15_000,
     gcTime: 30 * 60_000,
+  });
+}
+
+export function estimateQuery(stopId: string, window: EstimateWindow, routeId: string | null) {
+  return queryOptions({
+    queryKey: ['estimate', stopId, window, routeId] as const,
+    queryFn: async (): Promise<Estimate> =>
+      (
+        await apiGetChecked(
+          withQuery(`/v1/stops/${stopId}/estimate`, {
+            window,
+            routeId: routeId === null ? undefined : routeId,
+          }),
+          estimateSchema,
+        )
+      ).data,
+    staleTime: 60_000,
+    gcTime: 60 * 60_000,
+  });
+}
+
+export function routeStopsQuery(routeId: string) {
+  return queryOptions({
+    queryKey: ['route', routeId, 'stops'] as const,
+    queryFn: async (): Promise<RouteStopList> =>
+      (await apiGetChecked(`/v1/routes/${routeId}/stops`, routeStopListSchema)).data,
+    staleTime: 30 * 60_000,
+    gcTime: 24 * 60 * 60_000,
+  });
+}
+
+export function runwayListQuery() {
+  return queryOptions({
+    queryKey: ['runway'] as const,
+    queryFn: async (): Promise<Runway[]> =>
+      (await apiGetChecked('/v1/runway', runwayListSchema)).data,
+    staleTime: 30 * 60_000,
+    gcTime: 24 * 60 * 60_000,
+  });
+}
+
+export function reportQuery(publicId: string) {
+  return queryOptions({
+    queryKey: reportQueryKey(publicId),
+    queryFn: async (): Promise<ReportDetail> => fetchReport(publicId),
+    staleTime: 30_000,
+    gcTime: 30 * 60_000,
+  });
+}
+
+export function myReportsQuery() {
+  return queryOptions({
+    queryKey: ['reports', 'mine'] as const,
+    queryFn: async (): Promise<ReportListItem[]> =>
+      (await apiGetChecked('/v1/reports/mine', reportListSchema)).data,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+  });
+}
+
+export function runwayByRouteQuery(routeId: string) {
+  return queryOptions({
+    queryKey: ['runway', 'route', routeId] as const,
+    queryFn: async (): Promise<Runway> =>
+      (await apiGetChecked(`/v1/services/${routeId}/runway`, runwaySchema)).data,
+    staleTime: 30 * 60_000,
+    gcTime: 24 * 60 * 60_000,
   });
 }
