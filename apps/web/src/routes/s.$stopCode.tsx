@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { StatePanel } from '../components/StatePanel';
 import { EstimateBlock } from '../features/estimate/EstimateBlock';
 import { StopLead } from '../features/stop/StopLead';
+import { canStartAt } from '../lib/stop-status';
 import { useStartEpisode } from '../features/wait/use-episode-actions';
 import { isApiError } from '../lib/api';
 import { describeError } from '../lib/errors';
@@ -18,10 +19,12 @@ function EstimateSection({
   stopId,
   period,
   routeId,
+  routeCount,
 }: {
   stopId: string;
   period: EstimateWindow;
   routeId: string | null;
+  routeCount: number;
 }) {
   const query = useQuery(estimateQuery(stopId, period, routeId));
 
@@ -51,7 +54,7 @@ function EstimateSection({
     );
   }
 
-  return <EstimateBlock estimate={query.data} simulatedHint={false} />;
+  return <EstimateBlock estimate={query.data} simulatedHint={false} routeCount={routeCount} />;
 }
 
 function WindowSwitch({ current }: { current: EstimateWindow }) {
@@ -243,10 +246,16 @@ function QrLandingPage() {
         corridors={routes.map((route) => route.code)}
         isDemo={stop.isDemo}
         eyebrow="Halte"
+        status={stop.status}
       />
 
       <WindowSwitch current={period} />
-      <EstimateSection stopId={stop.id} period={period} routeId={routeId} />
+      <EstimateSection
+        stopId={stop.id}
+        period={period}
+        routeId={routeId}
+        routeCount={routes.length}
+      />
 
       {qrErrorMessage === null ? (
         <p className="note">
@@ -287,7 +296,12 @@ function QrLandingPage() {
       )}
 
       <div className="actions">
-        <button type="button" className="btn" onClick={begin} disabled={start.isPending}>
+        <button
+          type="button"
+          className="btn"
+          onClick={begin}
+          disabled={start.isPending || !canStartAt(stop.status)}
+        >
           {start.isPending ? 'Mencatat…' : 'Mulai menunggu'}
         </button>
         <Link to="/" className="btn btn--ghost">

@@ -1,20 +1,27 @@
 import { useMemo, useState } from 'react';
 import { evidenceOf } from '../../lib/evidence';
 import {
-  FULL_VIEW,
+  COMPACT_SIZE,
+  FULL_SIZE,
+  buildGrid,
   buildPlot,
   isZoomedIn,
   panView,
   viewBoxAttr,
   zoomView,
   type MapPoint,
+  type PlotSize,
   type ViewBox,
 } from '../../lib/map';
+
+export type MapVariant = 'full' | 'compact';
 
 export interface MapPlotProps {
   points: readonly MapPoint[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  variant?: MapVariant;
+  labelMode?: 'all' | 'focus';
 }
 
 const ZOOM_STEP = 1.6;
@@ -27,9 +34,25 @@ const PAN_KEYS: Readonly<Record<string, readonly [number, number]>> = {
   ArrowDown: [0, PAN_STEP],
 };
 
-export function MapPlot({ points, selectedId, onSelect }: MapPlotProps) {
-  const [view, setView] = useState<ViewBox>(FULL_VIEW);
-  const plot = useMemo(() => buildPlot(points), [points]);
+function sizeOf(variant: MapVariant): PlotSize {
+  return variant === 'compact' ? COMPACT_SIZE : FULL_SIZE;
+}
+
+export function MapPlot({
+  points,
+  selectedId,
+  onSelect,
+  variant = 'full',
+  labelMode = 'all',
+}: MapPlotProps) {
+  const size = sizeOf(variant);
+  const fullView = useMemo(() => ({ x: 0, y: 0, w: size.width, h: size.height }), [size]);
+  const [view, setView] = useState<ViewBox>(fullView);
+  const plot = useMemo(
+    () => buildPlot(points, { width: size.width, height: size.height }),
+    [points, size.width, size.height],
+  );
+  const grid = useMemo(() => buildGrid(size.width, size.height, size.gridStep), [size]);
   const labelById = useMemo(
     () => new Map(plot.labels.map((label) => [label.id, label])),
     [plot.labels],
@@ -72,9 +95,20 @@ export function MapPlot({ points, selectedId, onSelect }: MapPlotProps) {
           aria-label={`Sebaran ${plot.points.length} halte pada bidang datar`}
           preserveAspectRatio="xMidYMid meet"
         >
+          <g className="mapplot-grid" aria-hidden="true">
+            {grid.map((line) => (
+              <line
+                key={`${String(line.x1)}-${String(line.y1)}`}
+                x1={line.x1}
+                y1={line.y1}
+                x2={line.x2}
+                y2={line.y2}
+              />
+            ))}
+          </g>
           {plot.points.map((point) => {
-            const label = labelById.get(point.id);
             const selected = point.id === selectedId;
+            const label = labelMode === 'focus' && !selected ? undefined : labelById.get(point.id);
             return (
               <g
                 key={point.id}
@@ -98,7 +132,13 @@ export function MapPlot({ points, selectedId, onSelect }: MapPlotProps) {
                   onSelect(point.id);
                 }}
               >
-                <circle className="mapplot-dot" cx={point.x} cy={point.y} r={selected ? 9 : 7} />
+                <circle className="mapplot-hit" cx={point.x} cy={point.y} r={18} />
+                <circle
+                  className="mapplot-dot"
+                  cx={point.x}
+                  cy={point.y}
+                  r={selected ? size.dotRadius + 2 : size.dotRadius}
+                />
                 {label === undefined ? null : (
                   <text
                     className="mapplot-label"
@@ -139,12 +179,30 @@ export function MapPlot({ points, selectedId, onSelect }: MapPlotProps) {
           className="btn btn--ghost"
           disabled={!isZoomedIn(view)}
           onClick={() => {
-            setView(FULL_VIEW);
+            setView(fullView);
           }}
         >
           Seluruh halte
         </button>
       </div>
+
+      {plot.scale === null ? null : (
+        <p className="mapplot-scale">
+          <svg
+            className="mapplot-scale-bar"
+            viewBox={`0 0 ${String(plot.scale.pixels)} 6`}
+            width={plot.scale.pixels}
+            height={6}
+            aria-hidden="true"
+            focusable="false"
+          >
+            <rect x="0" y="0" width={plot.scale.pixels} height="1" />
+            <rect x="0" y="0" width="1" height="6" />
+            <rect x={plot.scale.pixels - 1} y="0" width="1" height="6" />
+          </svg>
+          <span className="mapplot-scale-label">{plot.scale.label}</span>
+        </p>
+      )}
 
       <figcaption className="mapplot-caption">
         Skema posisi, bukan peta jalan. Garis skala mengikuti jarak lurus antar halte, bukan rute bus.

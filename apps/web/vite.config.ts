@@ -53,6 +53,9 @@ function cspMeta(apiOrigin: string): Plugin {
 
 export default defineConfig(({ mode }) => {
   const apiOrigin = originOf(loadEnv(mode, '.', 'VITE_').VITE_API_URL);
+  const apiPort = Number.parseInt(process.env['HADIR_API_PORT'] ?? '3000', 10) || 3000;
+  const webPort = Number.parseInt(process.env['HADIR_WEB_PORT'] ?? '5173', 10) || 5173;
+  const proxyTarget = `http://localhost:${String(apiPort)}`;
   return {
     plugins: [
       cspMeta(apiOrigin),
@@ -66,11 +69,12 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
     ],
     server: {
-      port: 5173,
+      port: webPort,
+      strictPort: true,
       proxy: {
-        '/v1': { target: 'http://localhost:3000', changeOrigin: true },
-        '/healthz': { target: 'http://localhost:3000', changeOrigin: true },
-        '/readyz': { target: 'http://localhost:3000', changeOrigin: true },
+        '/v1': { target: proxyTarget, changeOrigin: true },
+        '/healthz': { target: proxyTarget, changeOrigin: true },
+        '/readyz': { target: proxyTarget, changeOrigin: true },
       },
     },
     preview: { port: 4173 },

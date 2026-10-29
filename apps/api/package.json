@@ -27,7 +27,8 @@
     "test:boundary": "NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest-e2e.json --runInBand --rootDir test partner-boundary",
     "test:admin-boundary": "NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest-e2e.json --runInBand --rootDir test admin-boundary",
     "test:http-boundary": "NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest-e2e.json --runInBand --rootDir test partner-http",
-    "test:boundary:all": "pnpm test:boundary && pnpm test:admin-boundary && pnpm test:http-boundary"
+    "test:boundary:all": "pnpm test:boundary && pnpm test:admin-boundary && pnpm test:http-boundary",
+    "dev": "nest start --watch --env-file .env"
   },
   "dependencies": {
     "@hadir/contracts": "workspace:*",

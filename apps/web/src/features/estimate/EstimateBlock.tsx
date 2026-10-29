@@ -18,6 +18,7 @@ import { WarningList } from './WarningList';
 export interface EstimateBlockProps {
   estimate: Estimate;
   simulatedHint: boolean;
+  routeCount: number;
 }
 
 function MeasuredValue({ estimate }: { estimate: Estimate }) {
@@ -60,7 +61,7 @@ function InsufficientValue({ estimate }: { estimate: Estimate }) {
   );
 }
 
-export function EstimateBlock({ estimate, simulatedHint }: EstimateBlockProps) {
+export function EstimateBlock({ estimate, simulatedHint, routeCount }: EstimateBlockProps) {
   const readout = estimateReadout(estimate);
   const status = estimateStatus(estimate.evidence, estimate.direction);
   const measured = readout.kind === 'measured';
@@ -74,7 +75,7 @@ export function EstimateBlock({ estimate, simulatedHint }: EstimateBlockProps) {
         {estimate.simulated || simulatedHint ? <span className="tag tag--demo">Simulasi</span> : null}
       </div>
 
-      <PromiseRow promise={estimate.promise} />
+      <PromiseRow promise={estimate.promise} routeCount={routeCount} />
       <div className="platform-line" aria-hidden="true" />
 
       <div className="estimate-body">

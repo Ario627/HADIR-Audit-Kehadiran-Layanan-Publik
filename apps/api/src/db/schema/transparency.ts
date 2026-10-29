@@ -44,7 +44,7 @@ export const anchorLog = pgTable(
   ],
 );
 
-export const exports = pgTable(
+export const exportJobs = pgTable(
   'exports',
   {
     id: uuidv7PrimaryKey(),
@@ -88,4 +88,4 @@ export const exports = pgTable(
 );
 
 export type AnchorLog = typeof anchorLog.$inferSelect;
-export type ExportRecord = typeof exports.$inferSelect;
+export type ExportRecord = typeof exportJobs.$inferSelect;

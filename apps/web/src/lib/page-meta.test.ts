@@ -8,6 +8,7 @@ import {
   documentTitle,
   isProtectedPath,
   pageMetaFor,
+  resolvePageMeta,
   robotsDirective,
 } from './page-meta';
 
@@ -87,6 +88,40 @@ describe('documentTitle', () => {
     for (const path of KNOWN_PATHS) {
       expect(documentTitle(pageMetaFor(path)).length).toBeLessThanOrEqual(MAX_TITLE);
     }
+  });
+});
+
+describe('resolvePageMeta', () => {
+  it('memakai meta halaman biasa saat rute dikenali', () => {
+    expect(resolvePageMeta('/privasi', false)).toEqual(pageMetaFor('/privasi'));
+  });
+
+  it('mengabaikan path saat halaman tidak ditemukan', () => {
+    const meta = resolvePageMeta('/apa-saja', true);
+    expect(meta).not.toBeNull();
+    expect(meta?.title).not.toBe(pageMetaFor('/')?.title);
+  });
+
+  it('memberi judul 404 yang menyebut halaman tidak ditemukan', () => {
+    expect(documentTitle(resolvePageMeta('/x', true))).toBe('Halaman tidak ditemukan · HADIR');
+  });
+
+  it('menyembunyikan halaman 404 dari mesin pencari', () => {
+    expect(robotsDirective(resolvePageMeta('/x', true)?.noindex ?? false)).toBe(
+      'noindex, nofollow',
+    );
+  });
+
+  it('tidak membocorkan path mentah ke deskripsi', () => {
+    expect(descriptionFor(resolvePageMeta('/rahasia-panjang-sekali', true))).not.toContain(
+      'rahasia',
+    );
+  });
+
+  it('kembali ke meta halaman saat rute valid', () => {
+    expect(resolvePageMeta('/metodologi', false)?.title).toBe(
+      pageMetaFor('/metodologi')?.title,
+    );
   });
 });
 

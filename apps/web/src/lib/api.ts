@@ -187,6 +187,10 @@ export function ensureDevice(): Promise<void> {
   return deviceBootstrap;
 }
 
+export function hasDevice(): boolean {
+  return csrfToken() !== null;
+}
+
 function clearCsrfCookie(): void {
   if (typeof document === 'undefined') {
     return;

@@ -9,7 +9,7 @@ import type {
   StartEpisodeInput,
   StartMode,
 } from '@hadir/contracts';
-import { apiRequest, apiSendChecked, type PayloadSchema } from './api';
+import { apiRequest, apiSendChecked, hasDevice, isApiError, type PayloadSchema } from './api';
 import { isRecord, readCount, readIsoDateTime, readNullableText, readNumber, readText } from './guards';
 
 const EPISODE_PATH = '/v1/episodes';
@@ -156,10 +156,20 @@ export async function fetchEpisode(episodeId: string): Promise<EpisodeSnapshot> 
 }
 
 export async function fetchActiveEpisode(): Promise<ActiveEpisodeSnapshot> {
-  const envelope = await apiSendChecked(`${EPISODE_PATH}/active`, nullableEpisodeSchema, {
-    method: 'GET',
-  });
-  return { episode: envelope.data, serverNow: envelope.meta.generatedAt };
+  if (!hasDevice()) {
+    return { episode: null, serverNow: null };
+  }
+  try {
+    const envelope = await apiSendChecked(`${EPISODE_PATH}/active`, nullableEpisodeSchema, {
+      method: 'GET',
+    });
+    return { episode: envelope.data, serverNow: envelope.meta.generatedAt };
+  } catch (error) {
+    if (isApiError(error) && error.code === 'UNAUTHENTICATED') {
+      return { episode: null, serverNow: null };
+    }
+    throw error;
+  }
 }
 
 export interface StartRequest {

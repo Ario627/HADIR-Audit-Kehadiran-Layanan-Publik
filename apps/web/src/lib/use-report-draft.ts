@@ -5,42 +5,58 @@ import { clearDraft, readDraft, writeDraft } from './draft-store';
 
 export interface DraftFields {
   text: string;
+  acknowledged: boolean;
   photoUploadId: string | null;
   photoSavedAt: number | null;
 }
 
+export interface DraftContext {
+  stopCode: string | null;
+  category: ReportCategory | null;
+  triageSessionId: string | null;
+}
+
+export interface DraftOptions {
+  draftId: string;
+  fields: DraftFields;
+  context: DraftContext;
+  onRestore: (draft: ReportDraft) => void;
+}
+
 export interface DraftBinding {
+  loaded: boolean;
   restored: ReportDraft | null;
   saving: boolean;
   savedAt: number | null;
   discard: () => void;
 }
 
-export function useReportDraft(
-  fields: DraftFields,
-  context: { stopCode: string | null; category: ReportCategory | null },
-  onRestore: (draft: ReportDraft) => void,
-): DraftBinding {
+export function useReportDraft({ draftId, fields, context, onRestore }: DraftOptions): DraftBinding {
+  const [loaded, setLoaded] = useState(false);
   const [restored, setRestored] = useState<ReportDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const restoreRef = useRef(onRestore);
   restoreRef.current = onRestore;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestRef = useRef<DraftInput>({ ...context, ...fields });
+  const latestRef = useRef<DraftInput>({ draftId, ...context, ...fields });
   const dirtyRef = useRef(false);
-  const restoredOnce = useRef(false);
+  const loadedOnce = useRef(false);
 
-  latestRef.current = { ...context, ...fields };
+  latestRef.current = { draftId, ...context, ...fields };
 
   useEffect(() => {
-    if (restoredOnce.current) {
+    if (loadedOnce.current) {
       return;
     }
-    restoredOnce.current = true;
+    loadedOnce.current = true;
     let alive = true;
-    void readDraft().then((draft) => {
-      if (!alive || draft === null) {
+    void readDraft(draftId).then((draft) => {
+      if (!alive) {
+        return;
+      }
+      setLoaded(true);
+      if (draft === null) {
         return;
       }
       setRestored(draft);
@@ -50,10 +66,10 @@ export function useReportDraft(
     return () => {
       alive = false;
     };
-  }, []);
+  }, [draftId]);
 
   useEffect(() => {
-    const input = { ...context, ...fields };
+    const input: DraftInput = { draftId, ...context, ...fields };
     if (!hasContent(input)) {
       return;
     }
@@ -64,14 +80,13 @@ export function useReportDraft(
     }
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
-      const snapshot = latestRef.current;
-      void writeDraft(snapshot).then(() => {
+      void writeDraft(latestRef.current).then(() => {
         dirtyRef.current = false;
         setSaving(false);
         setSavedAt(Date.now());
       });
     }, DEBOUNCE_MS);
-  }, [context.stopCode, context.category, fields.text, fields.photoUploadId, fields.photoSavedAt]);
+  }, [draftId, context.stopCode, context.category, context.triageSessionId, fields.text, fields.acknowledged, fields.photoUploadId, fields.photoSavedAt]);
 
   useEffect(() => {
     const flush = (): void => {
@@ -122,5 +137,5 @@ export function useReportDraft(
     void clearDraft();
   }, []);
 
-  return { restored, saving, savedAt, discard };
+  return { loaded, restored, saving, savedAt, discard };
 }

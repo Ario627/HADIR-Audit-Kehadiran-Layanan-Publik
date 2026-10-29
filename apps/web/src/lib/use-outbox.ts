@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { OUTBOX_EVENT, findForEpisode, type OutboxEntry } from './outbox';
+import {
+  OUTBOX_EVENT,
+  findForDraft,
+  findForEpisode,
+  type OutboxEndEntry,
+  type OutboxReportEntry,
+} from './outbox';
 import { readOutbox } from './outbox-store';
 
 const POLL_MS = 30_000;
@@ -25,6 +31,8 @@ export function useOutboxSync(): { pending: number } {
     await refresh();
     if (result.sent > 0) {
       await queryClient.invalidateQueries({ queryKey: ['episode'] });
+      await queryClient.invalidateQueries({ queryKey: ['reports'] });
+      await queryClient.invalidateQueries({ queryKey: ['report'] });
     }
   }, [queryClient, refresh]);
 
@@ -63,8 +71,8 @@ export function useOutboxSync(): { pending: number } {
   return { pending };
 }
 
-export function useQueuedEnd(episodeId: string): OutboxEntry | null {
-  const [entry, setEntry] = useState<OutboxEntry | null>(null);
+export function useQueuedEnd(episodeId: string): OutboxEndEntry | null {
+  const [entry, setEntry] = useState<OutboxEndEntry | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -82,6 +90,29 @@ export function useQueuedEnd(episodeId: string): OutboxEntry | null {
       window.removeEventListener(OUTBOX_EVENT, load);
     };
   }, [episodeId]);
+
+  return entry;
+}
+
+export function useQueuedReport(draftId: string): OutboxReportEntry | null {
+  const [entry, setEntry] = useState<OutboxReportEntry | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const load = (): void => {
+      void readOutbox().then((entries) => {
+        if (alive) {
+          setEntry(findForDraft(entries, draftId));
+        }
+      });
+    };
+    load();
+    window.addEventListener(OUTBOX_EVENT, load);
+    return () => {
+      alive = false;
+      window.removeEventListener(OUTBOX_EVENT, load);
+    };
+  }, [draftId]);
 
   return entry;
 }

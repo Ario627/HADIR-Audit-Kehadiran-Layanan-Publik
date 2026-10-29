@@ -19,6 +19,7 @@ import { Route as PrivasiRouteImport } from './routes/privasi'
 import { Route as ScanRouteImport } from './routes/scan'
 import { Route as SekitarRouteImport } from './routes/sekitar'
 import { Route as KoridorRouteIdRouteImport } from './routes/koridor.$routeId'
+import { Route as LaporDraftIdRouteImport } from './routes/lapor.$draftId'
 import { Route as LaporanPublicIdRouteImport } from './routes/laporan.$publicId'
 import { Route as PartnerIndexRouteImport } from './routes/partner.index'
 import { Route as PartnerAnalitikRouteImport } from './routes/partner.analitik'
@@ -82,6 +83,11 @@ const KoridorRouteIdRoute = KoridorRouteIdRouteImport.update({
   id: '/koridor/$routeId',
   path: '/koridor/$routeId',
   getParentRoute: () => rootRouteImport,
+} as any)
+const LaporDraftIdRoute = LaporDraftIdRouteImport.update({
+  id: '/$draftId',
+  path: '/$draftId',
+  getParentRoute: () => LaporRoute,
 } as any)
 const LaporanPublicIdRoute = LaporanPublicIdRouteImport.update({
   id: '/laporan/$publicId',
@@ -151,7 +157,7 @@ const PartnerLaporanPublicIdRoute = PartnerLaporanPublicIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/lapor': typeof LaporRoute
+  '/lapor': typeof LaporRouteWithChildren
   '/masuk': typeof MasukRoute
   '/metodologi': typeof MetodologiRoute
   '/partner': typeof PartnerRouteWithChildren
@@ -160,6 +166,7 @@ export interface FileRoutesByFullPath {
   '/scan': typeof ScanRoute
   '/sekitar': typeof SekitarRoute
   '/koridor/$routeId': typeof KoridorRouteIdRoute
+  '/lapor/$draftId': typeof LaporDraftIdRoute
   '/laporan/$publicId': typeof LaporanPublicIdRoute
   '/partner/analitik': typeof PartnerAnalitikRoute
   '/partner/ekspor': typeof PartnerEksporRoute
@@ -176,7 +183,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/lapor': typeof LaporRoute
+  '/lapor': typeof LaporRouteWithChildren
   '/masuk': typeof MasukRoute
   '/metodologi': typeof MetodologiRoute
   '/peta': typeof PetaRoute
@@ -184,6 +191,7 @@ export interface FileRoutesByTo {
   '/scan': typeof ScanRoute
   '/sekitar': typeof SekitarRoute
   '/koridor/$routeId': typeof KoridorRouteIdRoute
+  '/lapor/$draftId': typeof LaporDraftIdRoute
   '/laporan/$publicId': typeof LaporanPublicIdRoute
   '/partner/analitik': typeof PartnerAnalitikRoute
   '/partner/ekspor': typeof PartnerEksporRoute
@@ -201,7 +209,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/lapor': typeof LaporRoute
+  '/lapor': typeof LaporRouteWithChildren
   '/masuk': typeof MasukRoute
   '/metodologi': typeof MetodologiRoute
   '/partner': typeof PartnerRouteWithChildren
@@ -210,6 +218,7 @@ export interface FileRoutesById {
   '/scan': typeof ScanRoute
   '/sekitar': typeof SekitarRoute
   '/koridor/$routeId': typeof KoridorRouteIdRoute
+  '/lapor/$draftId': typeof LaporDraftIdRoute
   '/laporan/$publicId': typeof LaporanPublicIdRoute
   '/partner/analitik': typeof PartnerAnalitikRoute
   '/partner/ekspor': typeof PartnerEksporRoute
@@ -237,6 +246,7 @@ export interface FileRouteTypes {
     | '/scan'
     | '/sekitar'
     | '/koridor/$routeId'
+    | '/lapor/$draftId'
     | '/laporan/$publicId'
     | '/partner/analitik'
     | '/partner/ekspor'
@@ -261,6 +271,7 @@ export interface FileRouteTypes {
     | '/scan'
     | '/sekitar'
     | '/koridor/$routeId'
+    | '/lapor/$draftId'
     | '/laporan/$publicId'
     | '/partner/analitik'
     | '/partner/ekspor'
@@ -286,6 +297,7 @@ export interface FileRouteTypes {
     | '/scan'
     | '/sekitar'
     | '/koridor/$routeId'
+    | '/lapor/$draftId'
     | '/laporan/$publicId'
     | '/partner/analitik'
     | '/partner/ekspor'
@@ -303,7 +315,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  LaporRoute: typeof LaporRoute
+  LaporRoute: typeof LaporRouteWithChildren
   MasukRoute: typeof MasukRoute
   MetodologiRoute: typeof MetodologiRoute
   PartnerRoute: typeof PartnerRouteWithChildren
@@ -392,6 +404,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/koridor/$routeId'
       preLoaderRoute: typeof KoridorRouteIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/lapor/$draftId': {
+      id: '/lapor/$draftId'
+      path: '/$draftId'
+      fullPath: '/lapor/$draftId'
+      preLoaderRoute: typeof LaporDraftIdRouteImport
+      parentRoute: typeof LaporRoute
     }
     '/laporan/$publicId': {
       id: '/laporan/$publicId'
@@ -487,6 +506,16 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface LaporRouteChildren {
+  LaporDraftIdRoute: typeof LaporDraftIdRoute
+}
+
+const LaporRouteChildren: LaporRouteChildren = {
+  LaporDraftIdRoute: LaporDraftIdRoute,
+}
+
+const LaporRouteWithChildren = LaporRoute._addFileChildren(LaporRouteChildren)
+
 interface PartnerRouteChildren {
   PartnerAnalitikRoute: typeof PartnerAnalitikRoute
   PartnerEksporRoute: typeof PartnerEksporRoute
@@ -510,7 +539,7 @@ const PartnerRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  LaporRoute: LaporRoute,
+  LaporRoute: LaporRouteWithChildren,
   MasukRoute: MasukRoute,
   MetodologiRoute: MetodologiRoute,
   PartnerRoute: PartnerRouteWithChildren,

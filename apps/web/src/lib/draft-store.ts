@@ -3,7 +3,7 @@ import { decodeDraft, encodeDraft, type DraftInput, type ReportDraft } from './d
 const DB_NAME = 'hadir.draft';
 const DB_VERSION = 1;
 const STORE = 'drafts';
-const KEY = 'report';
+const KEY = 'active';
 const CLOSE_DELAY_MS = 30_000;
 
 let memory: string | null | undefined;
@@ -79,18 +79,21 @@ function openDb(): Promise<IDBDatabase | null> {
   return handle;
 }
 
-export async function readDraft(now: number = Date.now()): Promise<ReportDraft | null> {
+export async function readDraft(
+  draftId: string,
+  now: number = Date.now(),
+): Promise<ReportDraft | null> {
   const db = await openDb();
   if (db === null) {
-    return decodeDraft(memory ?? null, now);
+    return decodeDraft(memory ?? null, draftId, now);
   }
   try {
     const tx = db.transaction(STORE, 'readonly');
     const row = await requestToPromise(tx.objectStore(STORE).get(KEY));
     await transactionDone(tx);
-    return decodeDraft(typeof row === 'string' ? row : null, now);
+    return decodeDraft(typeof row === 'string' ? row : null, draftId, now);
   } catch {
-    return decodeDraft(memory ?? null, now);
+    return decodeDraft(memory ?? null, draftId, now);
   }
 }
 
@@ -113,17 +116,21 @@ export async function writeDraft(input: DraftInput, now: number = Date.now()): P
   }
 }
 
-export async function clearDraft(): Promise<void> {
+export async function clearDraft(): Promise<boolean> {
+  const hadMemory = memory !== null;
   memory = null;
   const db = await openDb();
   if (db === null) {
-    return;
+    return hadMemory;
   }
   try {
     const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).delete(KEY);
+    const store = tx.objectStore(STORE);
+    const existing = await requestToPromise(store.get(KEY));
+    store.delete(KEY);
     await transactionDone(tx);
+    return typeof existing === 'string' || hadMemory;
   } catch {
-    return;
+    return hadMemory;
   }
 }

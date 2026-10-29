@@ -1,5 +1,6 @@
 import type { Presence, StartMode } from '@hadir/contracts';
 import type { TicketView } from './episode';
+import { broadcastEpisodeChange } from './resume';
 import { startModeLabel } from './episode';
 
 export interface StoredEpisode {
@@ -119,6 +120,7 @@ export function writeStoredEpisode(input: StoredEpisodeInput, now: number = Date
   } catch {
     return;
   }
+  broadcastEpisodeChange(input.episodeId);
 }
 
 export function clearStoredEpisode(): void {
@@ -131,6 +133,7 @@ export function clearStoredEpisode(): void {
   } catch {
     return;
   }
+  broadcastEpisodeChange(null);
 }
 
 export function ticketFromStorage(stored: StoredEpisode): TicketView {

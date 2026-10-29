@@ -3,21 +3,25 @@ import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { isApiError } from '../../lib/api';
 import { describeError } from '../../lib/errors';
+import { describedByFor, hasIssueFor, issueFor, type FieldIssue } from '../../lib/form-errors';
 import {
   PASSWORD_MAX,
   PASSWORD_MIN,
+  collectPasswordIssues,
   hasPasswordIssue,
   readPasswordIssues,
 } from '../../lib/partner';
 import { changePartnerPassword } from '../../lib/partner-api';
+import { ErrorSummary } from '../forms/ErrorSummary';
 
 export function PasswordChange() {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [attempted, setAttempted] = useState(false);
+  const [issues, setIssues] = useState<readonly FieldIssue[]>([]);
+  const [submitCount, setSubmitCount] = useState(0);
   const [changed, setChanged] = useState<number | null>(null);
-  const issues = readPasswordIssues({ current, next, confirm });
+  const local = readPasswordIssues({ current, next, confirm });
 
   const mutate = useMutation({
     mutationFn: () => changePartnerPassword(current, next),
@@ -27,7 +31,7 @@ export function PasswordChange() {
       setCurrent('');
       setNext('');
       setConfirm('');
-      setAttempted(false);
+      setIssues([]);
     },
   });
 
@@ -45,16 +49,21 @@ export function PasswordChange() {
 
       <form
         className="settings-form"
+        noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          setAttempted(true);
           setChanged(null);
-          if (hasPasswordIssue(issues)) {
+          const found = collectPasswordIssues(local);
+          setIssues(found);
+          setSubmitCount((current) => current + 1);
+          if (hasPasswordIssue(local)) {
             return;
           }
           mutate.mutate();
         }}
       >
+        <ErrorSummary issues={issues} focusSignal={submitCount} />
+
         <div className="field">
           <label htmlFor="password-current">Kata sandi sekarang</label>
           <input
@@ -63,19 +72,17 @@ export function PasswordChange() {
             autoComplete="current-password"
             maxLength={PASSWORD_MAX}
             value={current}
-            aria-invalid={attempted && issues.current !== null}
-            aria-describedby={
-              attempted && issues.current !== null ? 'password-current-error' : undefined
-            }
+            aria-invalid={hasIssueFor(issues, 'password-current')}
+            aria-describedby={describedByFor('password-current', hasIssueFor(issues, 'password-current'))}
             onChange={(event) => {
               setCurrent(event.target.value);
             }}
           />
-          {attempted && issues.current !== null ? (
-            <p className="field-error" id="password-current-error" role="alert">
-              {issues.current}
+          {issueFor(issues, 'password-current') === null ? null : (
+            <p className="field-error" id="password-current-galat">
+              {issueFor(issues, 'password-current')}
             </p>
-          ) : null}
+          )}
         </div>
 
         <div className="field">
@@ -87,17 +94,17 @@ export function PasswordChange() {
             minLength={PASSWORD_MIN}
             maxLength={PASSWORD_MAX}
             value={next}
-            aria-invalid={attempted && issues.next !== null}
-            aria-describedby={attempted && issues.next !== null ? 'password-next-error' : undefined}
+            aria-invalid={hasIssueFor(issues, 'password-next')}
+            aria-describedby={describedByFor('password-next', hasIssueFor(issues, 'password-next'))}
             onChange={(event) => {
               setNext(event.target.value);
             }}
           />
-          {attempted && issues.next !== null ? (
-            <p className="field-error" id="password-next-error" role="alert">
-              {issues.next}
+          {issueFor(issues, 'password-next') === null ? null : (
+            <p className="field-error" id="password-next-galat">
+              {issueFor(issues, 'password-next')}
             </p>
-          ) : null}
+          )}
         </div>
 
         <div className="field">
@@ -108,19 +115,17 @@ export function PasswordChange() {
             autoComplete="new-password"
             maxLength={PASSWORD_MAX}
             value={confirm}
-            aria-invalid={attempted && issues.confirm !== null}
-            aria-describedby={
-              attempted && issues.confirm !== null ? 'password-confirm-error' : undefined
-            }
+            aria-invalid={hasIssueFor(issues, 'password-confirm')}
+            aria-describedby={describedByFor('password-confirm', hasIssueFor(issues, 'password-confirm'))}
             onChange={(event) => {
               setConfirm(event.target.value);
             }}
           />
-          {attempted && issues.confirm !== null ? (
-            <p className="field-error" id="password-confirm-error" role="alert">
-              {issues.confirm}
+          {issueFor(issues, 'password-confirm') === null ? null : (
+            <p className="field-error" id="password-confirm-galat">
+              {issueFor(issues, 'password-confirm')}
             </p>
-          ) : null}
+          )}
         </div>
 
         {errorMessage === null ? null : (

@@ -115,9 +115,15 @@ describe('viewRows', () => {
 });
 
 describe('summarizeRows', () => {
-  it('menghitung halte terukur, episode, dan bukti kuat', () => {
+  it('menghitung halte terukur, episode, dan halte yang punya indikasi', () => {
     const totals = summarizeRows(buildRows([STOP_A, STOP_B], [COVERAGE_A]));
-    expect(totals).toEqual({ listed: 2, measured: 1, strong: 1, episodes: 34 });
+    expect(totals).toEqual({ listed: 2, measured: 1, withIndication: 1, episodes: 34 });
+  });
+
+  it('tidak menghitung halte tanpa data sebagai punya indikasi', () => {
+    const totals = summarizeRows(buildRows([STOP_A, STOP_B], []));
+    expect(totals.withIndication).toBe(0);
+    expect(totals.measured).toBe(0);
   });
 });
 

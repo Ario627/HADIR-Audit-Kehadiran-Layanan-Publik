@@ -33,10 +33,10 @@ export function BoardLedger({ totals, period }: BoardLedgerProps) {
         </dd>
       </div>
       <div>
-        <dt>Bukti kuat</dt>
+        <dt>Cukup data</dt>
         <dd>
-          {formatNumber(totals.strong, 0)}
-          <span className="ledger-note">memenuhi ambang</span>
+          {formatNumber(totals.withIndication, 0)}
+          <span className="ledger-note">≥15 episode, ≥3 klaster</span>
         </dd>
       </div>
     </dl>

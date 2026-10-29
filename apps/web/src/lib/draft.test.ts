@@ -19,12 +19,17 @@ import {
 
 const NOW = Date.parse('2026-10-28T09:00:00.000Z');
 const PHOTO_ID = '0192f0d0-0000-7000-8000-000000000001';
+const DRAFT_ID = '0192f0d0-0000-7000-8000-00000000000a';
+const TRIAGE_ID = '0192f0d0-0000-7000-8000-00000000000b';
 
 function input(overrides: Partial<DraftInput> = {}): DraftInput {
   return {
+    draftId: DRAFT_ID,
+    triageSessionId: TRIAGE_ID,
     stopCode: 'BJM-014',
     category: 'service_wait',
     text: 'Bus tidak datang lebih dari empat puluh menit di halte ini.',
+    acknowledged: false,
     photoUploadId: null,
     photoSavedAt: null,
     ...overrides,
@@ -41,7 +46,7 @@ describe('constants', () => {
   });
 
   it('keeps the draft well inside a localStorage-sized payload', () => {
-    expect(MAX_SERIALIZED).toBeLessThanOrEqual(4096);
+    expect(MAX_SERIALIZED).toBeLessThanOrEqual(6144);
   });
 
   it('expires the draft sooner than a week', () => {
@@ -55,8 +60,9 @@ describe('constants', () => {
 
 describe('hasContent', () => {
   it('is false for an untouched form', () => {
-    expect(hasContent({ stopCode: null, category: null, text: '', photoUploadId: null, photoSavedAt: null })).toBe(false);
-    expect(hasContent({ stopCode: null, category: null, text: '   ', photoUploadId: null, photoSavedAt: null })).toBe(false);
+    const empty = { ...input(), stopCode: null, category: null, text: '', acknowledged: false };
+    expect(hasContent(empty)).toBe(false);
+    expect(hasContent({ ...empty, text: '   ' })).toBe(false);
   });
 
   it('is true once the user types or makes a choice', () => {
@@ -137,55 +143,56 @@ describe('encodeDraft', () => {
 describe('decodeDraft', () => {
   it('round-trips a draft', () => {
     const original = input();
-    const decoded = decodeDraft(encodeDraft(original, NOW), NOW);
+    const decoded = decodeDraft(encodeDraft(original, NOW), DRAFT_ID, NOW);
     expect(decoded).toEqual({ ...original, photoSavedAt: null, savedAt: NOW });
   });
 
   it('round-trips a draft with a live photo pointer', () => {
-    const decoded = decodeDraft(encodeDraft(input({ photoUploadId: PHOTO_ID }), NOW), NOW);
+    const decoded = decodeDraft(encodeDraft(input({ photoUploadId: PHOTO_ID }), NOW), DRAFT_ID, NOW);
     expect(decoded?.photoUploadId).toBe(PHOTO_ID);
     expect(decoded?.photoSavedAt).toBe(NOW);
   });
 
   it('drops an expired photo pointer on restore', () => {
     const raw = encodeDraft(input({ photoUploadId: PHOTO_ID }), NOW - PHOTO_TTL_MS - 1);
-    const decoded = decodeDraft(raw, NOW);
+    const decoded = decodeDraft(raw, DRAFT_ID, NOW);
     expect(decoded?.photoUploadId).toBeNull();
   });
 
   it('rejects nothing, empty, and oversized payloads', () => {
-    expect(decodeDraft(null, NOW)).toBeNull();
-    expect(decodeDraft('', NOW)).toBeNull();
-    expect(decodeDraft('x'.repeat(MAX_SERIALIZED + 1), NOW)).toBeNull();
+    expect(decodeDraft(null, DRAFT_ID, NOW)).toBeNull();
+    expect(decodeDraft('', DRAFT_ID, NOW)).toBeNull();
+    expect(decodeDraft('x'.repeat(MAX_SERIALIZED + 1), DRAFT_ID, NOW)).toBeNull();
   });
 
   it('rejects broken JSON and non-objects', () => {
-    expect(decodeDraft('{', NOW)).toBeNull();
-    expect(decodeDraft('[]', NOW)).toBeNull();
-    expect(decodeDraft('null', NOW)).toBeNull();
+    expect(decodeDraft('{', DRAFT_ID, NOW)).toBeNull();
+    expect(decodeDraft('[]', DRAFT_ID, NOW)).toBeNull();
+    expect(decodeDraft('null', DRAFT_ID, NOW)).toBeNull();
   });
 
   it('rejects an expired draft', () => {
     const raw = encodeDraft(input(), NOW - DRAFT_TTL_MS - 1);
-    expect(decodeDraft(raw, NOW)).toBeNull();
+    expect(decodeDraft(raw, DRAFT_ID, NOW)).toBeNull();
   });
 
   it('rejects a draft stamped in the future', () => {
     const raw = encodeDraft(input(), NOW + 120_000);
-    expect(decodeDraft(raw, NOW)).toBeNull();
+    expect(decodeDraft(raw, DRAFT_ID, NOW)).toBeNull();
   });
 
   it('rejects an unknown stop code', () => {
-    expect(decodeDraft(JSON.stringify({ ...draft(), stopCode: 'bukan kode!' }), NOW)).toBeNull();
+    expect(decodeDraft(JSON.stringify({ ...draft(), stopCode: 'bukan kode!' }), DRAFT_ID, NOW)).toBeNull();
   });
 
   it('rejects an unknown category', () => {
-    expect(decodeDraft(JSON.stringify({ ...draft(), category: 'bencana' }), NOW)).toBeNull();
+    expect(decodeDraft(JSON.stringify({ ...draft(), category: 'bencana' }), DRAFT_ID, NOW)).toBeNull();
   });
 
   it('accepts the null stop and category', () => {
     const decoded = decodeDraft(
       JSON.stringify({ ...draft(), stopCode: null, category: null }),
+      DRAFT_ID,
       NOW,
     );
     expect(decoded?.stopCode).toBeNull();
@@ -193,21 +200,21 @@ describe('decodeDraft', () => {
   });
 
   it('rejects a non-string text', () => {
-    expect(decodeDraft(JSON.stringify({ ...draft(), text: 42 }), NOW)).toBeNull();
+    expect(decodeDraft(JSON.stringify({ ...draft(), text: 42 }), DRAFT_ID, NOW)).toBeNull();
   });
 
   it('rejects a photo pointer that is not a uuid', () => {
     expect(
-      decodeDraft(JSON.stringify({ ...draft(), photoUploadId: '../etc', photoSavedAt: NOW }), NOW),
+      decodeDraft(JSON.stringify({ ...draft(), photoUploadId: '../etc', photoSavedAt: NOW }), DRAFT_ID, NOW),
     ).toBeNull();
   });
 
   it('rejects a pointer without a timestamp and vice versa', () => {
     expect(
-      decodeDraft(JSON.stringify({ ...draft(), photoUploadId: PHOTO_ID, photoSavedAt: null }), NOW),
+      decodeDraft(JSON.stringify({ ...draft(), photoUploadId: PHOTO_ID, photoSavedAt: null }), DRAFT_ID, NOW),
     ).toBeNull();
     expect(
-      decodeDraft(JSON.stringify({ ...draft(), photoUploadId: null, photoSavedAt: NOW }), NOW),
+      decodeDraft(JSON.stringify({ ...draft(), photoUploadId: null, photoSavedAt: NOW }), DRAFT_ID, NOW),
     ).toBeNull();
   });
 
@@ -220,21 +227,21 @@ describe('decodeDraft', () => {
       photoSavedAt: null,
       savedAt: NOW,
     };
-    expect(decodeDraft(JSON.stringify(empty), NOW)).toBeNull();
+    expect(decodeDraft(JSON.stringify(empty), DRAFT_ID, NOW)).toBeNull();
   });
 
   it('normalises the stop code to upper case', () => {
-    const decoded = decodeDraft(JSON.stringify({ ...draft(), stopCode: 'bjm-014' }), NOW);
+    const decoded = decodeDraft(JSON.stringify({ ...draft(), stopCode: 'bjm-014' }), DRAFT_ID, NOW);
     expect(decoded?.stopCode).toBe('BJM-014');
   });
 
   it('caps text that exceeds the report limit but stays inside the payload cap', () => {
-    const decoded = decodeDraft(JSON.stringify({ ...draft(), text: 'a'.repeat(2_500) }), NOW);
+    const decoded = decodeDraft(JSON.stringify({ ...draft(), text: 'a'.repeat(2_500) }), DRAFT_ID, NOW);
     expect(decoded?.text).toHaveLength(2000);
   });
 
   it('rejects a payload that grew beyond the serialized cap', () => {
-    const decoded = decodeDraft(JSON.stringify({ ...draft(), text: 'a'.repeat(9000) }), NOW);
+    const decoded = decodeDraft(JSON.stringify({ ...draft(), text: 'a'.repeat(9000) }), DRAFT_ID, NOW);
     expect(decoded).toBeNull();
   });
 
@@ -247,23 +254,23 @@ describe('decodeDraft', () => {
       photoSavedAt: {},
       savedAt: 'kemarin',
     };
-    expect(decodeDraft(JSON.stringify(hostile), NOW)).toBeNull();
+    expect(decodeDraft(JSON.stringify(hostile), DRAFT_ID, NOW)).toBeNull();
   });
 });
 
 describe('draftSummary', () => {
-  it('counts characters, category, and photo', () => {
-    const text = draftSummary(draft({ photoUploadId: PHOTO_ID, photoSavedAt: NOW }), NOW);
+  it('counts characters, consent, and photo', () => {
+    const text = draftSummary(
+      draft({ photoUploadId: PHOTO_ID, photoSavedAt: NOW, acknowledged: true }),
+      NOW,
+    );
     expect(text).toContain('karakter');
-    expect(text).toContain('kategori');
+    expect(text).toContain('publikasi');
     expect(text).toContain('foto');
   });
 
-  it('says empty when nothing was filled', () => {
-    expect(draftSummary(draft({ text: '   ' }), NOW)).toBe('kategori sudah dipilih');
-    expect(
-      draftSummary({ ...draft({ text: '' }), category: null, stopCode: null }, NOW),
-    ).toBe('draf kosong');
+  it('says nothing filled when the form is blank', () => {
+    expect(draftSummary(draft({ text: '   ', acknowledged: false }), NOW)).toBe('belum ada isian');
   });
 
   it('does not claim a photo that expired', () => {
@@ -300,7 +307,7 @@ describe('category coverage', () => {
       'other',
     ];
     for (const category of categories) {
-      expect(decodeDraft(JSON.stringify({ ...draft(), category }), NOW)?.category).toBe(category);
+      expect(decodeDraft(JSON.stringify({ ...draft(), category }), DRAFT_ID, NOW)?.category).toBe(category);
     }
   });
 });

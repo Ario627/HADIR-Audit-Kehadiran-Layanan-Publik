@@ -76,7 +76,7 @@ CREATE POLICY report_media_read ON report_media
     current_scope() = 'admin'
     OR (
       current_scope() = 'public'
-      AND status = 'approved'
+      AND status = 'ready'
       AND EXISTS (
         SELECT 1 FROM reports r
         WHERE r.id = report_media.report_id

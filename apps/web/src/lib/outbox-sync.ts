@@ -3,6 +3,7 @@ import { endEpisode } from './episode-api';
 import { announceOutbox, isDue, shouldAbandon, type OutboxEntry } from './outbox';
 import { isPermanentCode, penalizeEntry } from './outbox-queue';
 import { readOutbox, writeOutbox } from './outbox-store';
+import { submitReport } from './report-api';
 
 export interface FlushResult {
   sent: number;
@@ -17,16 +18,27 @@ function isOnline(): boolean {
 }
 
 async function executeEntry(entry: OutboxEntry): Promise<void> {
-  if (entry.kind !== 'episode.end') {
-    throw new Error('unsupported_outbox_kind');
+  if (entry.kind === 'episode.end') {
+    await endEpisode(
+      entry.targetId,
+      entry.body.outcome,
+      {
+        clientEndedAt: entry.body.clientEndedAt,
+        clientEventId: entry.body.clientEventId,
+      },
+      entry.idempotencyKey,
+    );
+    return;
   }
-  await endEpisode(
-    entry.targetId,
-    entry.body.outcome,
+  const { category, stopCode, text, triageSessionId, clientEventId } = entry.body;
+  await submitReport(
     {
-      clientEndedAt: entry.body.clientEndedAt,
-      clientEventId: entry.body.clientEventId,
+      stopCode,
+      category,
+      text,
+      ...(triageSessionId === null ? {} : { triageSessionId }),
     },
+    { clientEventId },
     entry.idempotencyKey,
   );
 }

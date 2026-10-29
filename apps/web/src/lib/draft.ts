@@ -2,9 +2,12 @@ import type { ReportCategory } from '@hadir/contracts';
 import { REPORT_MAX_TEXT } from './report';
 
 export interface ReportDraft {
+  draftId: string;
+  triageSessionId: string | null;
   stopCode: string | null;
   category: ReportCategory | null;
   text: string;
+  acknowledged: boolean;
   photoUploadId: string | null;
   photoSavedAt: number | null;
   savedAt: number;
@@ -14,7 +17,7 @@ export type DraftInput = Omit<ReportDraft, 'savedAt'>;
 
 export const DRAFT_TTL_MS = 48 * 60 * 60 * 1000;
 export const PHOTO_TTL_MS = 12 * 60 * 1000;
-export const MAX_SERIALIZED = 4_096;
+export const MAX_SERIALIZED = 6_144;
 export const MIN_SAVE_LENGTH = 1;
 
 const STOP_PATTERN = /^[A-Z0-9][A-Z0-9-]{2,11}$/;
@@ -39,6 +42,10 @@ function readTimestamp(raw: unknown): number | null {
   return typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? raw : null;
 }
 
+function readUuid(raw: unknown): string | null {
+  return typeof raw === 'string' && UUID_PATTERN.test(raw) ? raw : null;
+}
+
 function readStopCode(raw: unknown): string | null | undefined {
   if (raw === null) {
     return null;
@@ -61,14 +68,16 @@ function readPhotoId(raw: unknown): string | null | undefined {
   if (raw === null) {
     return null;
   }
-  return typeof raw === 'string' && UUID_PATTERN.test(raw) ? raw : undefined;
+  return readUuid(raw) ?? undefined;
 }
 
 export function hasContent(input: DraftInput): boolean {
   return (
     input.text.trim().length >= MIN_SAVE_LENGTH ||
     input.stopCode !== null ||
-    input.category !== null
+    input.category !== null ||
+    input.acknowledged ||
+    input.photoUploadId !== null
   );
 }
 
@@ -88,21 +97,26 @@ export function withoutStalePhoto(draft: ReportDraft, now: number): ReportDraft 
 
 export function encodeDraft(input: DraftInput, now: number): string | null {
   const text = input.text.slice(0, REPORT_MAX_TEXT);
-  const photoUploadId = input.photoUploadId === null ? null : input.photoUploadId;
   const payload: ReportDraft = {
+    draftId: input.draftId,
+    triageSessionId: input.triageSessionId,
     stopCode: input.stopCode,
     category: input.category,
     text,
-    photoUploadId,
-    photoSavedAt: photoUploadId === null ? null : (input.photoSavedAt ?? now),
+    acknowledged: input.acknowledged,
+    photoUploadId: input.photoUploadId,
+    photoSavedAt: input.photoUploadId === null ? null : (input.photoSavedAt ?? now),
     savedAt: now,
   };
   const serialized = JSON.stringify(payload);
   return serialized.length > MAX_SERIALIZED ? null : serialized;
 }
 
-export function decodeDraft(raw: string | null, now: number): ReportDraft | null {
+export function decodeDraft(raw: string | null, draftId: string, now: number): ReportDraft | null {
   if (raw === null || raw.length === 0 || raw.length > MAX_SERIALIZED) {
+    return null;
+  }
+  if (readUuid(draftId) === null) {
     return null;
   }
   let parsed: unknown;
@@ -114,6 +128,14 @@ export function decodeDraft(raw: string | null, now: number): ReportDraft | null
   if (!isRecord(parsed)) {
     return null;
   }
+  if (readUuid(parsed.draftId) !== draftId) {
+    return null;
+  }
+
+  const triageSessionId = parsed.triageSessionId === null ? null : readUuid(parsed.triageSessionId);
+  if (parsed.triageSessionId !== null && triageSessionId === null) {
+    return null;
+  }
 
   const stopCode = readStopCode(parsed.stopCode);
   const category = readCategory(parsed.category);
@@ -123,7 +145,9 @@ export function decodeDraft(raw: string | null, now: number): ReportDraft | null
   if (typeof parsed.text !== 'string') {
     return null;
   }
-  const text = parsed.text.slice(0, REPORT_MAX_TEXT);
+  if (typeof parsed.acknowledged !== 'boolean') {
+    return null;
+  }
 
   const photoUploadId = readPhotoId(parsed.photoUploadId);
   if (photoUploadId === undefined) {
@@ -141,17 +165,17 @@ export function decodeDraft(raw: string | null, now: number): ReportDraft | null
   if (savedAt === null) {
     return null;
   }
-  if (now - savedAt > DRAFT_TTL_MS) {
-    return null;
-  }
-  if (savedAt > now + 60_000) {
+  if (now - savedAt > DRAFT_TTL_MS || savedAt > now + 60_000) {
     return null;
   }
 
   const draft: ReportDraft = {
+    draftId,
+    triageSessionId,
     stopCode,
     category,
-    text,
+    text: parsed.text.slice(0, REPORT_MAX_TEXT),
+    acknowledged: parsed.acknowledged,
     photoUploadId,
     photoSavedAt,
     savedAt,
@@ -164,17 +188,17 @@ export function decodeDraft(raw: string | null, now: number): ReportDraft | null
 
 export function draftSummary(draft: ReportDraft, now: number): string {
   const parts: string[] = [];
-  if (draft.text.trim().length > 0) {
-    const chars = draft.text.trim().length;
+  const chars = draft.text.trim().length;
+  if (chars > 0) {
     parts.push(`${chars} karakter`);
   }
-  if (draft.category !== null) {
-    parts.push('kategori sudah dipilih');
+  if (draft.acknowledged) {
+    parts.push('sudah menyetujui publikasi');
   }
   if (photoStillValid(draft, now)) {
     parts.push('foto sudah diunggah');
   }
-  return parts.length === 0 ? 'draf kosong' : parts.join(' · ');
+  return parts.length === 0 ? 'belum ada isian' : parts.join(' · ');
 }
 
 export function draftAgeText(savedAt: number, now: number): string {

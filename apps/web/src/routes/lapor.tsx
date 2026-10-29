@@ -1,27 +1,19 @@
 import type { ReportCategory } from '@hadir/contracts';
 import { useQuery } from '@tanstack/react-query';
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { StatePanel } from '../components/StatePanel';
 import { CategoryPicker } from '../features/triage/CategoryPicker';
 import { VerdictCard } from '../features/triage/VerdictCard';
 import { useTriage } from '../features/triage/use-triage';
 import { StopPicker } from '../features/report/StopPicker';
-import { PhotoInput } from '../features/report/PhotoInput';
-import { DraftBanner, DraftSaved } from '../features/report/DraftBanner';
-import { useCreateReport } from '../features/report/use-report-actions';
 import { describeError, isNotFound } from '../lib/errors';
-import { stopByCodeQuery } from '../lib/queries';
-import {
-  checkReportText,
-  readReportCategory,
-  REPORT_MAX_TEXT,
-  REPORT_MIN_TEXT,
-  warningText,
-} from '../lib/report';
-import { readStopCode } from '../lib/qr';
+import { uuidv7 } from '../lib/id';
 import { prefetchAll } from '../lib/prefetch';
-import { useReportDraft } from '../lib/use-report-draft';
+import { readStopCode } from '../lib/qr';
+import { stopByCodeQuery } from '../lib/queries';
+import { readReportCategory } from '../lib/report';
+import { writeDraft } from '../lib/draft-store';
 
 export interface LaporSearch {
   halte?: string;
@@ -46,84 +38,49 @@ function LaporPage() {
   const navigate = useNavigate();
   const stopCode = readStopCode(search.halte);
   const category = readReportCategory(search.kategori);
-  const [text, setText] = useState('');
-  const [photoUploadId, setPhotoUploadId] = useState<string | null>(null);
-  const [photoSavedAt, setPhotoSavedAt] = useState<number | null>(null);
   const triage = useTriage();
-  const create = useCreateReport();
-  const now = Date.now();
-  const draft = useReportDraft(
-    { text, photoUploadId, photoSavedAt },
-    { stopCode, category },
-    (restoredDraft) => {
-      setText(restoredDraft.text);
-      setPhotoUploadId(restoredDraft.photoUploadId);
-      setPhotoSavedAt(restoredDraft.photoSavedAt);
-      if (restoredDraft.stopCode !== stopCode || restoredDraft.category !== category) {
-        void navigate({
-          to: '/lapor',
-          search: {
-            ...(restoredDraft.stopCode === null ? {} : { halte: restoredDraft.stopCode }),
-            ...(restoredDraft.category === null ? {} : { kategori: restoredDraft.category }),
-          },
-          replace: true,
-        });
-      }
-    },
-  );
-  const { discard } = draft;
-
-  useEffect(() => {
-    if (create.data !== undefined) {
-      discard();
-    }
-  }, [create.data, discard]);
+  const lastSignature = useRef<string | null>(null);
 
   const stop = useQuery(stopByCodeQuery(stopCode));
   const resolvedStop = stop.data === undefined ? null : stop.data;
-  const check = checkReportText(text);
-  const canTriage = stopCode !== null && category !== null && check.issue === null;
+
+  useEffect(() => {
+    if (stopCode === null || category === null) {
+      lastSignature.current = null;
+      return;
+    }
+    const signature = `${stopCode}|${category}`;
+    if (lastSignature.current === signature) {
+      return;
+    }
+    lastSignature.current = signature;
+    triage.mutate({ stopCode, routeId: null, category, text: '' });
+  }, [stopCode, category, triage]);
 
   function applySearch(next: LaporSearch): void {
     void navigate({ to: '/lapor', search: next });
   }
 
-  if (create.data !== undefined) {
-    const report = create.data.report;
-    return (
-      <>
-        <div className="page-head">
-          <p className="label">Terkirim</p>
-          <h1 className="page-title">Laporan {report.publicId} sudah masuk</h1>
-          <p className="page-lede">
-            Simpan tautan ini. Status berubah saat instansi menanggapi, dan kamu bisa memverifikasi
-            klaim penyelesaian.
-          </p>
-        </div>
-
-        {create.data.warnings.map((code) => {
-          const note = warningText(code);
-          return note === null ? null : (
-            <p key={code} className="note">
-              {note}
-            </p>
-          );
-        })}
-
-        <div className="actions">
-          <Link to="/laporan/$publicId" params={{ publicId: report.publicId }} className="btn">
-            Buka laporan
-          </Link>
-          <Link to="/" className="btn btn--ghost">
-            Ke papan
-          </Link>
-        </div>
-      </>
-    );
+  function openForm(): void {
+    if (stopCode === null || category === null) {
+      return;
+    }
+    const draftId = uuidv7();
+    void writeDraft({
+      draftId,
+      triageSessionId: triage.data === undefined ? null : triage.data.sessionId,
+      stopCode,
+      category,
+      text: '',
+      acknowledged: false,
+      photoUploadId: null,
+      photoSavedAt: null,
+    }).then(() => {
+      void navigate({ to: '/lapor/$draftId', params: { draftId } });
+    });
   }
 
   const triageError = triage.isError ? describeError(triage.error) : null;
-  const createError = create.isError ? describeError(create.error) : null;
 
   return (
     <>
@@ -131,20 +88,10 @@ function LaporPage() {
         <p className="label">Lapor</p>
         <h1 className="page-title">Sampaikan satu hal yang perlu diperbaiki</h1>
         <p className="page-lede">
-          Laporan diperiksa dulu terhadap data resmi dan pengukuran warga, lalu kamu tetap bisa
-          mengirimnya apa pun hasilnya.
+          Pilih halte dan jenis masalahnya dulu. Kami periksa laporanmu terhadap data resmi, lalu kamu
+          bisa menulis detail dan mengirim. Menulis panjang baru dilakukan setelah pemeriksaan.
         </p>
       </div>
-
-      {draft.restored === null ? null : (
-        <DraftBanner
-          draft={draft.restored}
-          saving={draft.saving}
-          savedAt={draft.savedAt}
-          now={now}
-          onDiscard={discard}
-        />
-      )}
 
       {stopCode === null ? (
         <StopPicker
@@ -163,7 +110,7 @@ function LaporPage() {
             type="button"
             className="link-button"
             onClick={() => {
-              applySearch({ ...search, halte: undefined });
+              applySearch({ halte: undefined, kategori: search.kategori });
             }}
           >
             Ganti halte
@@ -187,127 +134,88 @@ function LaporPage() {
         </StatePanel>
       ) : null}
 
-      {resolvedStop === null ? null : triage.data !== undefined ? (
+      {resolvedStop === null ? null : (
         <>
-          <VerdictCard
-            result={triage.data}
-            stopCode={resolvedStop.code}
-            routeId={null}
-            busy={create.isPending}
-            onSend={() => {
-              create.mutate({
-                stopCode: resolvedStop.code,
-                category: category ?? 'other',
-                text,
-                triageSessionId: triage.data.sessionId,
-                photoUploadId,
-              });
-            }}
-            onMeasure={() => {
-              void navigate({
-                to: '/s/$stopCode',
-                params: { stopCode: resolvedStop.code },
-              });
-            }}
-            onCorridor={() => undefined}
-            onJoin={(publicId) => {
-              void navigate({ to: '/laporan/$publicId', params: { publicId } });
-            }}
-          />
-
-          {createError === null ? null : (
-            <StatePanel tone="error" title={createError.title}>
-              {createError.detail}
-            </StatePanel>
-          )}
-
-          <div className="report-preview">
-            <p className="label">Teks yang akan dikirim</p>
-            <p className="report-preview-text">{check.text}</p>
-          </div>
-        </>
-      ) : (
-        <form
-          className="lapor-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (resolvedStop === null || category === null || check.issue !== null) {
-              return;
-            }
-            triage.mutate({
-              stopCode: resolvedStop.code,
-              routeId: null,
-              category,
-              text,
-            });
-          }}
-        >
           <CategoryPicker
             value={category}
             disabled={triage.isPending}
+            invalid={false}
             onChange={(next: ReportCategory) => {
               applySearch({ ...search, kategori: next });
             }}
           />
 
-          <PhotoInput
-            disabled={triage.isPending}
-            onUploaded={(photo) => {
-              setPhotoUploadId(photo === null ? null : photo.uploadId);
-              setPhotoSavedAt(photo === null ? null : Date.now());
-            }}
-          />
-
-          <div className="field">
-            <label htmlFor="teks-laporan">Ceritakan kejadiannya</label>
-            <textarea
-              id="teks-laporan"
-              name="teks"
-              rows={6}
-              maxLength={REPORT_MAX_TEXT}
-              value={text}
-              disabled={triage.isPending}
-              aria-describedby="teks-hint teks-counter"
-              aria-invalid={check.issue !== null && check.length > 0}
-              onChange={(event) => {
-                setText(event.target.value);
-              }}
-              placeholder="Contoh: bus K3A tidak muncul 07.10–07.40, papan rute tidak diperbarui."
-            />
-            <span className="field-hint" id="teks-hint">
-              Minimal {REPORT_MIN_TEXT} karakter yang bisa dibaca. Tanpa nama, email, atau nomor
-              telepon.
-            </span>
-            <span className="field-hint" id="teks-counter">
-              {check.length} dari {REPORT_MIN_TEXT} karakter
-            </span>
-          </div>
-
-          <DraftSaved saving={draft.saving} savedAt={draft.savedAt} now={now} />
+          {triage.isPending ? (
+            <StatePanel title="Memeriksa data">
+              Mencocokkan laporan ini dengan rencana layanan dan laporan warga lain.
+            </StatePanel>
+          ) : null}
 
           {triageError === null ? null : (
-            <StatePanel tone="error" title={triageError.title}>
-              {triageError.detail}
-            </StatePanel>
+            <>
+              <StatePanel tone="error" title={triageError.title}>
+                {triageError.detail}
+              </StatePanel>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    if (stopCode === null || category === null) {
+                      return;
+                    }
+                    lastSignature.current = null;
+                    triage.mutate({ stopCode, routeId: null, category, text: '' });
+                  }}
+                >
+                  Coba periksa lagi
+                </button>
+                <button type="button" className="btn btn--ghost" onClick={openForm}>
+                  Tetap tulis laporan
+                </button>
+              </div>
+            </>
           )}
 
-          <div className="actions">
-            <button type="submit" className="btn" disabled={!canTriage || triage.isPending}>
-              {triage.isPending ? 'Memeriksa…' : 'Periksa dan lanjut'}
-            </button>
-            <Link to="/" className="btn btn--ghost">
-              Batal
-            </Link>
-          </div>
-        </form>
+          {triage.data === undefined ? null : (
+            <>
+              <VerdictCard
+                result={triage.data}
+                stopCode={resolvedStop.code}
+                routeId={null}
+                busy={false}
+                onSend={openForm}
+                onMeasure={() => {
+                  void navigate({
+                    to: '/s/$stopCode',
+                    params: { stopCode: resolvedStop.code },
+                  });
+                }}
+                onCorridor={() => undefined}
+                onJoin={(publicId) => {
+                  void navigate({ to: '/laporan/$publicId', params: { publicId } });
+                }}
+              />
+              <p className="note">
+                Kartu ini menampilkan apa yang sudah tercatat sebelumnya. Menekan kirim membuka formulir
+                untuk menulis detail, melampirkan foto, dan mengirim laporan.
+              </p>
+            </>
+          )}
+        </>
       )}
+
+      <p className="note">
+        Belum punya draf? <Link to="/lapor">Mulai dari awal</Link>. Draf yang sedang kamu tulis
+        tersimpan di perangkat ini dan bisa dibuka lagi dari tautannya.
+      </p>
     </>
   );
 }
 
 export const Route = createFileRoute('/lapor')({
   validateSearch: (raw: Record<string, unknown>): LaporSearch => readLaporSearch(raw),
-  loaderDeps: ({ search }) => ({ halte: readStopCode(search.halte) }),
+  loaderDeps: ({ search }): { halte: string | null } => ({ halte: readStopCode(search.halte) }),
   loader: async ({ context, deps }) => {
     if (deps.halte === null) {
       return;

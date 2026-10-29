@@ -4,16 +4,22 @@ import { formatMinutesShort } from '../../lib/time';
 
 export interface PromiseRowProps {
   promise: Estimate['promise'];
+  routeCount: number;
 }
 
-export function PromiseRow({ promise }: PromiseRowProps) {
+export function PromiseRow({ promise, routeCount }: PromiseRowProps) {
   if (promise === null) {
+    const multipleRoutes = routeCount > 1;
     return (
       <p className="promise-row">
         <span className="promise-label">Janji headway</span>
-        <span className="promise-value">Belum tercatat</span>
+        <span className="promise-value">
+          {multipleRoutes ? 'Pilih satu koridor' : 'Belum tercatat'}
+        </span>
         <span className="promise-note">
-          Tanpa janji resmi, level bukti maksimum adalah indikasi.
+          {multipleRoutes
+            ? 'Halte ini dilayani lebih dari satu koridor dengan janji berbeda, jadi janji tidak bisa ditetapkan sebelum koridor dipilih.'
+            : 'Tanpa janji resmi, level bukti maksimum adalah indikasi.'}
         </span>
       </p>
     );

@@ -65,11 +65,19 @@ const INSTITUTION_SPECS: readonly InstitutionSpec[] = [
 
 const FOREIGN_STOP_CODES: readonly string[] = ['BMS-E11'];
 
-const EPISODE_COUNT = 200;
-const DEVICE_COUNT = 3;
+const EPISODE_COUNT = 1_260;
+const DEVICE_COUNT = 24;
+const SPREAD_DAYS = 27;
+const FIRST_HOUR = 6;
+const LAST_HOUR = 19;
 
 function seedHash(label: string): string {
   return createHash('sha256').update(`hadir.seed.v1|${label}`).digest('hex');
+}
+
+function seedUnit(label: string): number {
+  const bytes = createHash('sha256').update(`hadir.seed.unit.v1|${label}`).digest();
+  return bytes.readUInt32BE(0) / 0x1_0000_0000;
 }
 
 function seedUuid(label: string): string {
@@ -80,10 +88,10 @@ function seedUuid(label: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function startedAtFor(index: number, now: Date): Date {
+function startedAtFor(dayOffset: number, hour: number, minute: number, now: Date): Date {
   const value = new Date(now);
-  value.setUTCDate(value.getUTCDate() - (index % 6));
-  value.setUTCHours(6 + (index % 12), (index * 7) % 60, 0, 0);
+  value.setUTCDate(value.getUTCDate() - dayOffset);
+  value.setUTCHours(hour, minute, 0, 0);
   if (value.getTime() > now.getTime()) {
     value.setUTCDate(value.getUTCDate() - 1);
   }
@@ -315,11 +323,19 @@ async function main(): Promise<void> {
     const outcome = outcomeFor(index);
     const startMode = startModeFor(index);
     const durationS = durationFor(index, outcome);
-    const startedAt = startedAtFor(index, now);
+    const stopSlot = Math.floor(stopRows.length * seedUnit(`stop|${index}`) ** 1.7);
+    const stop = stopRows[Math.min(stopSlot, stopRows.length - 1)];
+    const hour = FIRST_HOUR + Math.floor(seedUnit(`hour|${index}`) * (LAST_HOUR - FIRST_HOUR));
+    const startedAt = startedAtFor(
+      Math.floor(seedUnit(`day|${index}`) * SPREAD_DAYS),
+      hour,
+      Math.floor(seedUnit(`minute|${index}`) * 60),
+      now,
+    );
     const endedAt = new Date(startedAt.getTime() + durationS * 1_000);
     const presence = presenceFor(index, startMode);
-    const stop = stopRows[index % stopRows.length];
     const route = routeRows[index % routeRows.length];
+    const deviceSlot = Math.floor(seedUnit(`device|${index}`) * DEVICE_COUNT);
     if (stop === undefined || route === undefined) {
       throw new Error('Data halte atau koridor seed tidak lengkap.');
     }
@@ -336,9 +352,9 @@ async function main(): Promise<void> {
       clientEndedAt: endedAt,
       clockSkewMs: 0,
       timeSource: 'server' as const,
-      deviceHash: deviceHashes[index % DEVICE_COUNT] ?? seedHash('device|0'),
+      deviceHash: deviceHashes[deviceSlot] ?? seedHash('device|0'),
       deviceDayHash: seedHash(
-        `device-day|${index % DEVICE_COUNT}|${startedAt.toISOString().slice(0, 10)}`,
+        `device-day|${deviceSlot}|${startedAt.toISOString().slice(0, 10)}`,
       ),
       clientEventId: seedUuid(`episode-client-event|${index}`),
       qrEpoch: startMode === 'qr' ? '202610' : null,

@@ -56,6 +56,12 @@ const PAGES: Readonly<Record<string, PageMeta>> = {
       'Laporkan tunggu panjang, bus tidak datang, halte rusak, atau masalah aksesibilitas pada halte terdaftar.',
     noindex: false,
   },
+  '/lapor/$draftId': {
+    title: 'Tulis laporan',
+    description:
+      'Formulir laporan dengan cerita kejadian, foto opsional, dan pernyataan publikasi. Draf tersimpan di perangkat ini.',
+    noindex: true,
+  },
   '/laporan/$publicId': {
     title: 'Detail laporan',
     description:
@@ -145,6 +151,22 @@ const UNKNOWN: PageMeta = {
   description: DEFAULT_TITLE,
   noindex: true,
 };
+
+const NOT_FOUND: PageMeta = {
+  title: 'Halaman tidak ditemukan',
+  description: 'Alamat ini tidak menunjuk halaman HADIR mana pun.',
+  noindex: true,
+};
+
+export function resolvePageMeta(
+  fullPath: string | null | undefined,
+  notFound: boolean,
+): PageMeta | null {
+  if (notFound) {
+    return NOT_FOUND;
+  }
+  return pageMetaFor(fullPath);
+}
 
 export function pageMetaFor(fullPath: string | null | undefined): PageMeta | null {
   if (typeof fullPath !== 'string' || fullPath.length === 0) {

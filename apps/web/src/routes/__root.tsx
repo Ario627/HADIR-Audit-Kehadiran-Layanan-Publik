@@ -1,17 +1,28 @@
 import { Link, Outlet, createRootRouteWithContext, useRouter } from '@tanstack/react-router';
 import type { ErrorComponentProps } from '@tanstack/react-router';
+import { useCallback, useState } from 'react';
 import { Masthead } from '../components/Masthead';
 import { PlatformLine } from '../components/PlatformLine';
 import { StatePanel } from '../components/StatePanel';
+import { ShortcutSheet } from '../features/shortcuts/ShortcutSheet';
 import { isApiError } from '../lib/api';
 import type { RouterContext } from '../lib/router-context';
 import { useOnline } from '../lib/use-online';
 import { useOutboxSync } from '../lib/use-outbox';
 import { usePageMeta } from '../lib/use-page-meta';
+import { useShortcuts } from '../lib/use-shortcuts';
 
 function RootLayout() {
   const online = useOnline();
-  useOutboxSync();
+  const { pending } = useOutboxSync();
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const openShortcuts = useCallback(() => {
+    setShortcutsOpen(true);
+  }, []);
+  const closeShortcuts = useCallback(() => {
+    setShortcutsOpen(false);
+  }, []);
+  useShortcuts({ onHelp: openShortcuts });
   usePageMeta();
   return (
     <>
@@ -24,7 +35,14 @@ function RootLayout() {
           Kamu offline. Angka yang tampil berasal dari data terakhir yang berhasil dimuat.
         </p>
       )}
+      {online && pending > 0 ? (
+        <p className="outbox-bar" role="status">
+          {pending} catatan menunggu terkirim. HADIR mencoba ulang otomatis, dan tiap catatan
+          memakai kunci idempotensi supaya tidak menjadi ganda.
+        </p>
+      ) : null}
       <Masthead />
+      <ShortcutSheet open={shortcutsOpen} onClose={closeShortcuts} />
       <main id="main" className="shell main">
         <Outlet />
       </main>
@@ -36,6 +54,10 @@ function RootLayout() {
           <Link to="/transparansi">Anchor harian</Link>
           {' · '}
           <Link to="/privasi">Privasi &amp; data saya</Link>
+          {' · '}
+          <button type="button" className="linkbtn" onClick={openShortcuts}>
+            Pintasan keyboard
+          </button>
         </p>
       </footer>
     </>

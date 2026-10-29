@@ -1,4 +1,5 @@
 import type { ReportCategory, ReportDetail, ReportStatus } from '@hadir/contracts';
+import type { FieldIssue } from './form-errors';
 
 export const REPORT_MIN_TEXT = 20;
 export const REPORT_MAX_TEXT = 2_000;
@@ -85,6 +86,43 @@ export interface ReportTextCheck {
   text: string;
   length: number;
   issue: ReportTextIssue | null;
+}
+
+export const STOP_FIELD_ID = 'cari-halte';
+export const CATEGORY_FIELD_ID = 'kategori-laporan';
+export const TEXT_FIELD_ID = 'teks-laporan';
+
+export interface ReportFormInput {
+  stopCode: string | null;
+  category: ReportCategory | null;
+  text: string;
+}
+
+export function reportFormIssues(input: ReportFormInput): FieldIssue[] {
+  const issues: FieldIssue[] = [];
+  if (input.stopCode === null) {
+    issues.push({
+      field: STOP_FIELD_ID,
+      label: 'Halte',
+      message: 'Pilih halte tempat kejadian sebelum mengirim laporan.',
+    });
+  }
+  if (input.category === null) {
+    issues.push({
+      field: CATEGORY_FIELD_ID,
+      label: 'Kategori',
+      message: 'Pilih satu kategori supaya laporan masuk ke instansi yang tepat.',
+    });
+  }
+  const check = checkReportText(input.text);
+  if (check.issue === 'too_short') {
+    issues.push({
+      field: TEXT_FIELD_ID,
+      label: 'Cerita kejadian',
+      message: `Tulis minimal ${REPORT_MIN_TEXT} karakter yang bisa dibaca (sekarang ${check.length}).`,
+    });
+  }
+  return issues;
 }
 
 export type StatusTone = 'neutral' | 'progress' | 'verified' | 'alert';

@@ -15,6 +15,10 @@ import {
   REPORT_CATEGORIES,
   REPORT_MAX_TEXT,
   REPORT_MIN_TEXT,
+  CATEGORY_FIELD_ID,
+  STOP_FIELD_ID,
+  TEXT_FIELD_ID,
+  reportFormIssues,
   sanitizeReportText,
   statusLabel,
   statusTone,
@@ -169,5 +173,41 @@ describe('laporan milik sendiri', () => {
     expect(() => {
       rememberOwnReport('x');
     }).not.toThrow();
+  });
+});
+
+describe('reportFormIssues', () => {
+  const valid = { stopCode: 'BJM-014', category: 'service_wait' as const, text: 'a'.repeat(25) };
+
+  it('reports nothing for a complete form', () => {
+    expect(reportFormIssues(valid)).toEqual([]);
+  });
+
+  it('asks for a stop first', () => {
+    const issues = reportFormIssues({ ...valid, stopCode: null });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.field).toBe(STOP_FIELD_ID);
+    expect(issues[0]?.label).toBe('Halte');
+  });
+
+  it('asks for a category next', () => {
+    const issues = reportFormIssues({ ...valid, category: null });
+    expect(issues[0]?.field).toBe(CATEGORY_FIELD_ID);
+  });
+
+  it('reports the short text with the current length', () => {
+    const issues = reportFormIssues({ ...valid, text: 'pendek' });
+    expect(issues[0]?.field).toBe(TEXT_FIELD_ID);
+    expect(issues[0]?.message).toContain(String(REPORT_MIN_TEXT));
+    expect(issues[0]?.message).toContain('6');
+  });
+
+  it('lists every problem at once in reading order', () => {
+    const issues = reportFormIssues({ stopCode: null, category: null, text: '' });
+    expect(issues.map((issue) => issue.field)).toEqual([
+      STOP_FIELD_ID,
+      CATEGORY_FIELD_ID,
+      TEXT_FIELD_ID,
+    ]);
   });
 });

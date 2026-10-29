@@ -5,6 +5,7 @@ import type {
   ReportCategory,
   ReportStatus,
 } from '@hadir/contracts';
+import type { FieldIssue } from './form-errors';
 
 export type PartnerTone = 'primary' | 'secondary' | 'tertiary' | 'danger';
 
@@ -165,6 +166,28 @@ export function actionSpec(action: PartnerAction): ActionSpec {
 
 export function actionIssueText(issue: ActionIssue): string {
   return ISSUE_TEXT[issue];
+}
+
+const ISSUE_TARGETS: Record<ActionIssue, { field: string; label: string }> = {
+  note_required: { field: 'action-note', label: 'Keterangan' },
+  note_too_short: { field: 'action-note', label: 'Keterangan' },
+  reason_required: { field: 'action-reason', label: 'Alasan penolakan' },
+  schedule_required: { field: 'action-schedule', label: 'Waktu tindak lanjut' },
+  schedule_in_past: { field: 'action-schedule', label: 'Waktu tindak lanjut' },
+};
+
+export function actionIssuesFor(issues: readonly ActionIssue[]): FieldIssue[] {
+  const seen = new Set<string>();
+  const output: FieldIssue[] = [];
+  for (const issue of issues) {
+    const target = ISSUE_TARGETS[issue];
+    if (seen.has(target.field)) {
+      continue;
+    }
+    seen.add(target.field);
+    output.push({ field: target.field, label: target.label, message: actionIssueText(issue) });
+  }
+  return output;
 }
 
 export function isOpenStatus(status: ReportStatus): boolean {
@@ -455,4 +478,21 @@ export function readPasswordIssues(input: PasswordInput): PasswordIssues {
 
 export function hasPasswordIssue(issues: PasswordIssues): boolean {
   return issues.current !== null || issues.next !== null || issues.confirm !== null;
+}
+
+const PASSWORD_FIELDS: readonly { key: keyof PasswordIssues; id: string; label: string }[] = [
+  { key: 'current', id: 'password-current', label: 'Kata sandi sekarang' },
+  { key: 'next', id: 'password-next', label: 'Kata sandi baru' },
+  { key: 'confirm', id: 'password-confirm', label: 'Ulangi kata sandi baru' },
+];
+
+export function collectPasswordIssues(issues: PasswordIssues): FieldIssue[] {
+  const output: FieldIssue[] = [];
+  for (const entry of PASSWORD_FIELDS) {
+    const message = issues[entry.key];
+    if (message !== null) {
+      output.push({ field: entry.id, label: entry.label, message });
+    }
+  }
+  return output;
 }

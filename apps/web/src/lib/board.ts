@@ -34,7 +34,7 @@ export interface BoardRow {
 export interface BoardTotals {
   listed: number;
   measured: number;
-  strong: number;
+  withIndication: number;
   episodes: number;
 }
 
@@ -185,16 +185,16 @@ export function viewRows(rows: readonly BoardRow[], filter: BoardFilter): BoardR
 
 export function summarizeRows(rows: readonly BoardRow[]): BoardTotals {
   let measured = 0;
-  let strong = 0;
+  let withIndication = 0;
   let episodes = 0;
   for (const row of rows) {
     episodes += row.episodes;
     if (row.episodes > 0) {
       measured += 1;
     }
-    if (row.level === 'strong' || row.level === 'field_verified') {
-      strong += 1;
+    if (row.level !== 'none') {
+      withIndication += 1;
     }
   }
-  return { listed: rows.length, measured, strong, episodes };
+  return { listed: rows.length, measured, withIndication, episodes };
 }

@@ -2,7 +2,7 @@
   "name": "hadir",
   "version": "0.1.0",
   "private": true,
-  "description": "HADIR — instrumen audit warga untuk layanan bus bersubsidi",
+  "description": "HADIR \u2014 instrumen audit warga untuk layanan bus bersubsidi",
   "license": "Apache-2.0",
   "packageManager": "pnpm@12.15.0",
   "engines": {
@@ -10,20 +10,27 @@
     "pnpm": ">=12 <13"
   },
   "scripts": {
-    "dev": "turbo run dev --parallel",
+    "dev": "turbo run dev",
     "dev:web": "pnpm --filter @hadir/web dev",
     "dev:api": "pnpm --filter @hadir/api start:dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "test:e2e": "pnpm --filter @hadir/web test:e2e",
+    "test:e2e": "pnpm --filter @hadir/api test:e2e",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "pnpm lint && pnpm typecheck && pnpm test",
-    "db:up": "docker compose -f infra/compose/docker-compose.dev.yml up -d",
+    "db:up": "docker compose -f infra/compose/docker-compose.dev.yml up -d postgres redis",
     "db:down": "docker compose -f infra/compose/docker-compose.dev.yml down",
-    "db:logs": "docker compose -f infra/compose/docker-compose.dev.yml logs -f"
+    "db:logs": "docker compose -f infra/compose/docker-compose.dev.yml logs -f",
+    "start": "bash scripts/dev.sh",
+    "start:check": "bash scripts/dev.sh --check",
+    "start:docker": "bash scripts/dev.sh --docker",
+    "start:local": "bash scripts/dev.sh --no-docker",
+    "db:up:storage": "docker compose -f infra/compose/docker-compose.dev.yml --profile storage up -d",
+    "db:reset": "docker compose -f infra/compose/docker-compose.dev.yml down -v && docker compose -f infra/compose/docker-compose.dev.yml up -d postgres redis",
+    "db:psql": "docker compose -f infra/compose/docker-compose.dev.yml exec postgres psql -U hadir -d hadir"
   },
   "devDependencies": {
     "prettier": "3.9.10",

@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 import { useRouterState } from '@tanstack/react-router';
-import { descriptionFor, documentTitle, pageMetaFor, robotsDirective } from './page-meta';
+import { descriptionFor, documentTitle, resolvePageMeta, robotsDirective } from './page-meta';
+
+const FIELD_SEPARATOR = '|';
+const ROOT_ONLY_MATCHES = 1;
 
 function upsertMeta(name: string, content: string): void {
   if (typeof document === 'undefined') {
@@ -18,16 +21,22 @@ function upsertMeta(name: string, content: string): void {
 }
 
 export function usePageMeta(): void {
-  const fullPath = useRouterState({
-    select: (state) => state.matches[state.matches.length - 1]?.fullPath ?? null,
+  const key = useRouterState({
+    select: (state) => {
+      const last = state.matches[state.matches.length - 1];
+      return `${state.matches.length}${FIELD_SEPARATOR}${last?.fullPath ?? ''}`;
+    },
   });
 
   useEffect(() => {
-    const meta = pageMetaFor(fullPath);
+    const separator = key.indexOf(FIELD_SEPARATOR);
+    const count = separator === -1 ? 0 : Number(key.slice(0, separator));
+    const fullPath = separator === -1 ? '' : key.slice(separator + 1);
+    const meta = resolvePageMeta(fullPath, count <= ROOT_ONLY_MATCHES);
     if (typeof document !== 'undefined') {
       document.title = documentTitle(meta);
     }
     upsertMeta('robots', robotsDirective(meta === null ? true : meta.noindex));
     upsertMeta('description', descriptionFor(meta));
-  }, [fullPath]);
+  }, [key]);
 }

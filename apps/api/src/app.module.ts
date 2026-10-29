@@ -22,6 +22,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { TransparencyModule } from './modules/transparency/transparency.module';
 import { InternalModule } from './modules/internal/internal.module';
+import { NewsModule } from './modules/news/news.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { InternalModule } from './modules/internal/internal.module';
     AdminModule,
     TransparencyModule,
     InternalModule,
+    NewsModule,
   ],
   controllers: [AppController, HealthController, MetaController],
   providers: [

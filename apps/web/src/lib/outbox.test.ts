@@ -17,8 +17,8 @@ import {
   summarize,
   trimEntries,
   withFailure,
-  type OutboxEntry,
-  type OutboxEnqueueInput,
+  type OutboxEndEntry,
+  type OutboxEndInput,
 } from './outbox';
 
 const NOW = 1_760_000_000_000;
@@ -26,7 +26,7 @@ const EPISODE_ID = '0192f0d0-0000-7000-8000-000000000001';
 const EVENT_ID = '0192f0d0-0000-7000-8000-000000000002';
 const KEY_ID = '0192f0d0-0000-7000-8000-000000000003';
 
-function input(overrides: Partial<OutboxEnqueueInput> = {}): OutboxEnqueueInput {
+function input(overrides: Partial<OutboxEndInput> = {}): OutboxEndInput {
   return {
     id: EVENT_ID,
     kind: 'episode.end',
@@ -41,7 +41,7 @@ function input(overrides: Partial<OutboxEnqueueInput> = {}): OutboxEnqueueInput 
   };
 }
 
-function entry(overrides: Partial<OutboxEntry> = {}): OutboxEntry {
+function entry(overrides: Partial<Omit<OutboxEndEntry, 'kind' | 'body'>> = {}): OutboxEndEntry {
   return { ...enqueueEntry(input(), NOW), ...overrides };
 }
 

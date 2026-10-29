@@ -6,7 +6,6 @@ import { describeError } from '../../lib/errors';
 import { uuidv7 } from '../../lib/id';
 import {
   PARTNER_ACTIONS,
-  actionIssueText,
   actionSpec,
   buildActionInput,
   issuesForAction,
@@ -15,6 +14,8 @@ import {
   type ActionValues,
 } from '../../lib/partner';
 import { actOnReport } from '../../lib/partner-api';
+import { actionIssuesFor } from '../../lib/partner';
+import { ErrorSummary } from '../forms/ErrorSummary';
 
 export interface ActionPanelProps {
   publicId: string;
@@ -54,6 +55,7 @@ export function ActionPanel({ publicId, canAct, now }: ActionPanelProps) {
   const [action, setAction] = useState<PartnerAction | null>(null);
   const [values, setValues] = useState<ActionValues>(EMPTY);
   const [issues, setIssues] = useState<readonly ActionIssue[]>([]);
+  const [submitCount, setSubmitCount] = useState(0);
   const [result, setResult] = useState<PartnerActionResult | null>(null);
 
   const mutate = useMutation({
@@ -72,6 +74,7 @@ export function ActionPanel({ publicId, canAct, now }: ActionPanelProps) {
     },
   });
 
+  const summaryIssues = actionIssuesFor(issues);
   const errorMessage = mutate.isError ? describeError(mutate.error) : null;
   const fieldErrors = isApiError(mutate.error) ? mutate.error.fieldErrors : [];
   const fieldError = (name: string): string | null =>
@@ -91,6 +94,7 @@ export function ActionPanel({ publicId, canAct, now }: ActionPanelProps) {
     }
     const found = issuesForAction(action, values, now);
     setIssues(found);
+    setSubmitCount((current) => current + 1);
     if (found.length > 0) {
       return;
     }
@@ -218,15 +222,7 @@ export function ActionPanel({ publicId, canAct, now }: ActionPanelProps) {
             </div>
           ) : null}
 
-          {issues.length === 0 ? null : (
-            <div className="alert-box" role="alert">
-              <ul className="actionpanel-issues">
-                {issues.map((issue) => (
-                  <li key={issue}>{actionIssueText(issue)}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <ErrorSummary issues={summaryIssues} focusSignal={submitCount} />
 
           {fieldError('scheduledFor') === null ? null : (
             <p className="field-error">{fieldError('scheduledFor')}</p>

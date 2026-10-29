@@ -1,7 +1,9 @@
+import type { ReportCategory } from '@hadir/contracts';
 import type { EndOutcome } from './episode';
 import {
   announceOutbox,
   enqueueEntry,
+  findForDraft,
   findForEpisode,
   withFailure,
   type OutboxEntry,
@@ -64,6 +66,45 @@ export async function queueEpisodeEnd(
       body: {
         outcome: input.outcome,
         clientEndedAt: input.clientEndedAt,
+        clientEventId: input.clientEventId,
+      },
+      idempotencyKey: input.idempotencyKey,
+    },
+    now,
+  );
+  await writeOutbox([...entries, entry]);
+  announceOutbox();
+  return true;
+}
+
+export interface QueuedReportInput {
+  draftId: string;
+  stopCode: string;
+  category: ReportCategory;
+  text: string;
+  triageSessionId: string | null;
+  clientEventId: string;
+  idempotencyKey: string;
+}
+
+export async function queueReport(
+  input: QueuedReportInput,
+  now: number = Date.now(),
+): Promise<boolean> {
+  const entries = await readOutbox(now);
+  if (findForDraft(entries, input.draftId) !== null) {
+    return false;
+  }
+  const entry = enqueueEntry(
+    {
+      id: input.clientEventId,
+      kind: 'report.create',
+      targetId: input.draftId,
+      body: {
+        category: input.category,
+        stopCode: input.stopCode,
+        text: input.text,
+        triageSessionId: input.triageSessionId,
         clientEventId: input.clientEventId,
       },
       idempotencyKey: input.idempotencyKey,

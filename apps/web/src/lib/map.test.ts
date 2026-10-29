@@ -118,7 +118,20 @@ describe('buildPlot', () => {
       points: [],
       labels: [],
       skipped: 0,
+      grid: [],
+      scale: null,
     });
+  });
+
+  it('menggambar gratikula dan skala saat ada halte', () => {
+    const plot = buildPlot([
+      point({ code: 'A', lat: -7.4, lon: 109.2 }),
+      point({ code: 'B', lat: -7.6, lon: 109.4 }),
+    ]);
+    expect(plot.grid.length).toBeGreaterThan(0);
+    expect(plot.scale).not.toBeNull();
+    expect(plot.scale?.metres).toBeGreaterThan(0);
+    expect(plot.scale?.label).toMatch(/m$|km$/);
   });
 
   it('centres a single stop', () => {

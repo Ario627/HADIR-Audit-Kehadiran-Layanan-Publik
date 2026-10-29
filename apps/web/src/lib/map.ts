@@ -26,12 +26,27 @@ export interface LabelPlacement {
   anchor: 'start' | 'end';
 }
 
+export interface GridLine {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+export interface ScaleBar {
+  metres: number;
+  pixels: number;
+  label: string;
+}
+
 export interface Plot {
   width: number;
   height: number;
   points: PlotPoint[];
   labels: LabelPlacement[];
   skipped: number;
+  grid: GridLine[];
+  scale: ScaleBar | null;
 }
 
 export interface Box {
@@ -51,6 +66,30 @@ export interface ViewBox {
 export const PLOT_WIDTH = 1000;
 export const PLOT_HEIGHT = 640;
 export const MIN_ZOOM_W = 180;
+
+export const COMPACT_PLOT_WIDTH = 420;
+export const COMPACT_PLOT_HEIGHT = 300;
+
+export interface PlotSize {
+  width: number;
+  height: number;
+  gridStep: number;
+  dotRadius: number;
+}
+
+export const FULL_SIZE: PlotSize = {
+  width: PLOT_WIDTH,
+  height: PLOT_HEIGHT,
+  gridStep: 64,
+  dotRadius: 7,
+};
+
+export const COMPACT_SIZE: PlotSize = {
+  width: COMPACT_PLOT_WIDTH,
+  height: COMPACT_PLOT_HEIGHT,
+  gridStep: 40,
+  dotRadius: 6,
+};
 
 const PLOT_PADDING = 52;
 const MIN_SPAN_M = 500;
@@ -246,7 +285,7 @@ export function buildPlot(
   const height = options.height ?? PLOT_HEIGHT;
   const center = centerOf(points);
   if (center === null) {
-    return { width, height, points: [], labels: [], skipped: 0 };
+    return { width, height, points: [], labels: [], skipped: 0, grid: [], scale: null };
   }
 
   const local = points.map((point) => ({
@@ -279,7 +318,49 @@ export function buildPlot(
   }));
 
   const { labels, skipped } = placeLabels(projected, width, height);
-  return { width, height, points: projected, labels, skipped };
+  return {
+    width,
+    height,
+    points: projected,
+    labels,
+    skipped,
+    grid: buildGrid(width, height),
+    scale: buildScaleBar(width, height, scale),
+  };
+}
+
+export function buildGrid(width: number, height: number, step = 64): GridLine[] {
+  const lines: GridLine[] = [];
+  for (let x = step; x < width; x += step) {
+    lines.push({ x1: x, y1: 0, x2: x, y2: height });
+  }
+  for (let y = step; y < height; y += step) {
+    lines.push({ x1: 0, y1: y, x2: width, y2: y });
+  }
+  return lines;
+}
+
+export function buildScaleBar(width: number, height: number, scale: number): ScaleBar | null {
+  if (!Number.isFinite(scale) || scale <= 0) {
+    return null;
+  }
+  const target = Math.min(width * 0.22, 160);
+  const candidates = [100, 200, 250, 500, 1_000, 2_000, 5_000];
+  let best = candidates[0] ?? 500;
+  for (const candidate of candidates) {
+    if (candidate * scale <= target) {
+      best = candidate;
+    }
+  }
+  const pixels = Math.round(best * scale);
+  if (pixels < 24) {
+    return null;
+  }
+  return {
+    metres: best,
+    pixels,
+    label: best >= 1_000 ? `${String(best / 1_000)} km` : `${String(best)} m`,
+  };
 }
 
 export function zoomView(view: ViewBox, factor: number, focusX = 0.5, focusY = 0.5): ViewBox {

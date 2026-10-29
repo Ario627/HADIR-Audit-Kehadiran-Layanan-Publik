@@ -9,6 +9,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { queryClient } from './lib/query';
 import { registerServiceWorker } from './lib/sw-register';
+import { applyStoredTheme } from './lib/theme';
 import { router } from './router';
 
 const container = document.getElementById('root');
@@ -17,6 +18,7 @@ if (container === null) {
   throw new Error('Elemen #root tidak ditemukan di index.html.');
 }
 
+applyStoredTheme();
 registerServiceWorker();
 
 createRoot(container).render(

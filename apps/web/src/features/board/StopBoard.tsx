@@ -5,7 +5,11 @@ import { formatMinutesShort, formatNumber } from '../../lib/time';
 
 export interface StopBoardProps {
   rows: readonly BoardRow[];
+  highlightedId?: string | null;
+  onHighlight?: (stopId: string | null) => void;
 }
+
+const BAR_UNITS = 100;
 
 function PromiseCell({ row }: { row: BoardRow }) {
   if (row.promiseMinutes === null) {
@@ -25,9 +29,43 @@ function PromiseCell({ row }: { row: BoardRow }) {
   );
 }
 
-function StopRow({ row }: { row: BoardRow }) {
+function EpisodeBar({ value, max }: { value: number; max: number }) {
+  const width = max <= 0 ? 0 : Math.max(1, Math.round((value / max) * 100));
   return (
-    <tr role="row">
+    <svg
+      className="board-bar"
+      viewBox={`0 0 ${String(BAR_UNITS)} 1`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="0" y="0" width={width} height="1" />
+    </svg>
+  );
+}
+
+function StopRow({
+  row,
+  maxEpisodes,
+  highlighted,
+  onHighlight,
+}: {
+  row: BoardRow;
+  maxEpisodes: number;
+  highlighted: boolean;
+  onHighlight: ((stopId: string | null) => void) | undefined;
+}) {
+  const link = onHighlight;
+  return (
+    <tr
+      role="row"
+      className="board-row"
+      data-highlighted={highlighted ? 'true' : 'false'}
+      onMouseEnter={link === undefined ? undefined : () => { link(row.stopId); }}
+      onMouseLeave={link === undefined ? undefined : () => { link(null); }}
+      onFocusCapture={link === undefined ? undefined : () => { link(row.stopId); }}
+      onBlurCapture={link === undefined ? undefined : () => { link(null); }}
+    >
       <th scope="row" role="rowheader" className="board-code">
         {row.code}
       </th>
@@ -44,13 +82,18 @@ function StopRow({ row }: { row: BoardRow }) {
         <span className="cell-label" aria-hidden="true">
           Janji
         </span>
-        <PromiseCell row={row} />
+        <span className="board-promise-value">
+          <PromiseCell row={row} />
+        </span>
       </td>
       <td role="cell" className="board-num">
         <span className="cell-label" aria-hidden="true">
           Episode
         </span>
-        {row.episodes === 0 ? '—' : formatNumber(row.episodes, 0)}
+        <span className="board-num-value">
+          {row.episodes === 0 ? '—' : formatNumber(row.episodes, 0)}
+        </span>
+        {row.episodes === 0 ? null : <EpisodeBar value={row.episodes} max={maxEpisodes} />}
       </td>
       <td role="cell" className="board-level">
         <span className="level" data-level={row.level}>
@@ -61,7 +104,8 @@ function StopRow({ row }: { row: BoardRow }) {
   );
 }
 
-export function StopBoard({ rows }: StopBoardProps) {
+export function StopBoard({ rows, highlightedId = null, onHighlight }: StopBoardProps) {
+  const maxEpisodes = rows.reduce((best, row) => Math.max(best, row.episodes), 0);
   return (
     <table className="board" role="table">
       <caption className="visually-hidden">
@@ -88,7 +132,13 @@ export function StopBoard({ rows }: StopBoardProps) {
       </thead>
       <tbody role="rowgroup">
         {rows.map((row) => (
-          <StopRow key={row.stopId} row={row} />
+          <StopRow
+            key={row.stopId}
+            row={row}
+            maxEpisodes={maxEpisodes}
+            highlighted={row.stopId === highlightedId}
+            onHighlight={onHighlight}
+          />
         ))}
       </tbody>
     </table>

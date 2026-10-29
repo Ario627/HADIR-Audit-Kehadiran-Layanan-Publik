@@ -1,12 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StatePanel } from '../components/StatePanel';
 import { OutcomeActions } from '../features/wait/OutcomeActions';
 import { SyncStatus, type SyncPhase } from '../features/wait/SyncStatus';
 import { WaitTicket } from '../features/wait/WaitTicket';
 import { useEndEpisode, useHeartbeat } from '../features/wait/use-episode-actions';
 import { describeError } from '../lib/errors';
+import { activeEpisodeQueryKey } from '../lib/episode-api';
 import { elapsedSeedMs, ticketFromEpisode, type EndOutcome } from '../lib/episode';
 import {
   clearStoredEpisode,
@@ -20,6 +21,7 @@ import { episodeQuery } from '../lib/queries';
 import { useElapsedSeconds } from '../lib/use-elapsed-seconds';
 import { useOnline } from '../lib/use-online';
 import { useQueuedEnd } from '../lib/use-outbox';
+import { useCrossTabEpisode } from '../lib/use-resume';
 
 function WaitPage() {
   const { episodeId } = Route.useParams();
@@ -33,12 +35,18 @@ function WaitPage() {
   const end = useEndEpisode(validId ? episodeId : '');
   const queued = useQueuedEnd(validId ? episodeId : '');
 
+  const reread = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: episodeQuery(episodeId).queryKey });
+    void queryClient.invalidateQueries({ queryKey: activeEpisodeQueryKey() });
+  }, [episodeId, queryClient]);
+
+  useCrossTabEpisode({ watchedId: validId ? episodeId : null, onChanged: reread });
+
   const snapshot = query.data;
   const episode = snapshot?.episode ?? null;
   const usableStored = stored !== null && stored.episodeId === episodeId ? stored : null;
 
-  const queuedAt = queued === null ? null : Date.parse(queued.body.clientEndedAt);
-  const seedMs =
+  const queuedAt = queued === null ? null : Date.parse(queued.body.clientEndedAt);  const seedMs =
     queuedAt !== null && episode !== null
       ? Math.max(0, queuedAt - Date.parse(episode.startedAt))
       : episode !== null

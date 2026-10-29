@@ -113,7 +113,9 @@ function PetaPage() {
       ) : null}
 
       {stops.isPending || rows === null ? (
-        <StatePanel title="Menyiapkan peta">Mengambil koordinat halte dan cakupan data.</StatePanel>
+        failed ? null : (
+          <StatePanel title="Menyiapkan peta">Mengambil koordinat halte dan cakupan data.</StatePanel>
+        )
       ) : points.length === 0 ? (
         <StatePanel title="Belum ada halte berkoordinat">
           Tidak ada halte terdaftar yang bisa digambar. Buka papan bukti untuk daftar lengkap.

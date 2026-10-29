@@ -32,6 +32,8 @@ import {
   stopListSchema,
   transparencyAnchorSchema,
 } from './guards';
+import { fetchNews, newsQueryKey } from './news-api';
+import type { NewsFeed, NewsRegionCode } from './news';
 import { fetchReport, reportQueryKey } from './report-api';
 import { readQrProof, type QrSearchInput } from './qr';
 
@@ -219,5 +221,15 @@ export function runwayByRouteQuery(routeId: string) {
       (await apiGetChecked(`/v1/services/${routeId}/runway`, runwaySchema)).data,
     staleTime: 30 * 60_000,
     gcTime: 24 * 60 * 60_000,
+  });
+}
+
+export function newsQuery(region: NewsRegionCode) {
+  return queryOptions({
+    queryKey: newsQueryKey(region),
+    queryFn: async (): Promise<NewsFeed> => fetchNews(region),
+    staleTime: 10 * 60_000,
+    gcTime: 60 * 60_000,
+    retry: 1,
   });
 }

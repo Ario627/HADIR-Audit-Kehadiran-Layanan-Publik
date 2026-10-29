@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   clearLocalData,
+  clearSummary,
   inventorySummary,
   NOT_COLLECTED,
   PRIVACY_PRINCIPLES,
@@ -90,8 +91,9 @@ describe('readLocalInventory', () => {
 });
 
 describe('clearLocalData', () => {
-  it('menghapus kedua kunci dan melaporkan apa yang dihapus', () => {
+  it('menghapus kedua kunci dan melaporkan apa yang dihapus', async () => {
     const storage = installWindow();
+    const openedAt = new Date(Date.now() - 5 * 60_000).toISOString();
     storage.setItem('hadir.reports.v1', JSON.stringify(['123456']));
     storage.setItem(
       'hadir.episode.v1',
@@ -100,27 +102,58 @@ describe('clearLocalData', () => {
         stopCode: 'BMS-A12',
         stopName: 'Halte UMP',
         routeCode: null,
-        startedAt: '2026-10-28T01:00:00.000Z',
+        startedAt: openedAt,
         startMode: 'manual',
         presence: 'unverified',
-        savedAt: Date.parse('2026-10-28T01:00:00.000Z'),
+        savedAt: Date.parse(openedAt),
       }),
     );
 
-    const result = clearLocalData();
-    expect(result).toEqual({ episodeRemoved: true, reportsRemoved: 1 });
+    const result = await clearLocalData();
+    expect(result.episodeRemoved).toBe(true);
+    expect(result.reportsRemoved).toBe(1);
     expect(storage.getItem('hadir.episode.v1')).toBeNull();
     expect(storage.getItem('hadir.reports.v1')).toBeNull();
   });
 
-  it('aman dipanggil saat perangkat belum punya data', () => {
+  it('aman dipanggil saat perangkat belum punya data', async () => {
     installWindow();
-    expect(clearLocalData()).toEqual({ episodeRemoved: false, reportsRemoved: 0 });
+    const result = await clearLocalData();
+    expect(result.episodeRemoved).toBe(false);
+    expect(result.reportsRemoved).toBe(0);
+    expect(result.draftRemoved).toBe(false);
+    expect(result.queuedRemoved).toBe(0);
   });
 
-  it('aman dipanggil tanpa penyimpanan sama sekali', () => {
+  it('aman dipanggil tanpa penyimpanan sama sekali', async () => {
     removeWindow();
-    expect(() => clearLocalData()).not.toThrow();
+    await expect(clearLocalData()).resolves.toBeDefined();
+  });
+});
+
+describe('clearSummary', () => {
+  it('menyebut semua yang terhapus', () => {
+    const summary = clearSummary({
+      episodeRemoved: true,
+      reportsRemoved: 2,
+      draftRemoved: true,
+      queuedRemoved: 1,
+    });
+    expect(summary).toContain('episode tunggu');
+    expect(summary).toContain('2 nomor laporan');
+    expect(summary).toContain('draf laporan');
+    expect(summary).toContain('1 catatan antrean');
+  });
+
+  it('mengatakan tidak ada yang perlu dihapus', () => {
+    expect(
+      clearSummary({
+        episodeRemoved: false,
+        reportsRemoved: 0,
+        draftRemoved: false,
+        queuedRemoved: 0,
+      }),
+    ).toBe('Tidak ada catatan lokal yang perlu dihapus.');
   });
 });
 

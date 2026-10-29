@@ -6,6 +6,7 @@ import { describeError } from '../lib/errors';
 import { prefetchAll } from '../lib/prefetch';
 import {
   clearLocalData,
+  clearSummary,
   inventorySummary,
   NOT_COLLECTED,
   PRIVACY_PRINCIPLES,
@@ -117,6 +118,12 @@ function PrivacyPage() {
           Data di perangkat ini
         </h2>
         <p className="note">{inventorySummary(inventory)}</p>
+        <p className="note">
+          Selain itu HADIR menyimpan tiga hal di penyimpanan lokal perangkat ini: draf laporan yang
+          sedang ditulis, antrean kiriman yang belum sempat terkirim, dan pilihan tema tampilan.
+          Draf dan antrean memuat teks yang kamu tulis sendiri, bukan data orang lain, dan keduanya
+          ikut terhapus oleh tombol di bawah.
+        </p>
 
         {cleared === null ? null : (
           <p className="report-action-note" role="status">
@@ -127,8 +134,9 @@ function PrivacyPage() {
         {confirming ? (
           <div className="confirm">
             <p className="confirm-text" id="clear-question">
-              Hapus catatan lokal di perangkat ini? Laporan yang sudah terkirim tetap ada di server,
-              dan episode yang sedang berjalan tidak ikut dibatalkan.
+              Hapus catatan lokal di perangkat ini? Termasuk episode tunggu, nomor laporan, draf
+              yang belum terkirim, dan antrean yang belum sempat dikirim. Laporan yang sudah
+              terkirim tetap ada di server, dan episode yang sedang berjalan tidak ikut dibatalkan.
             </p>
             <div className="confirm-actions">
               <button
@@ -136,14 +144,12 @@ function PrivacyPage() {
                 className="btn btn--danger"
                 aria-describedby="clear-question"
                 onClick={() => {
-                  const result = clearLocalData();
-                  setInventory(readLocalInventory());
-                  setConfirming(false);
-                  setCleared(
-                    result.episodeRemoved || result.reportsRemoved > 0
-                      ? 'Catatan lokal sudah dihapus.'
-                      : 'Tidak ada catatan lokal yang perlu dihapus.',
-                  );
+                  void (async () => {
+                    const result = await clearLocalData();
+                    setInventory(readLocalInventory());
+                    setConfirming(false);
+                    setCleared(clearSummary(result));
+                  })();
                 }}
               >
                 Ya, hapus catatan lokal
