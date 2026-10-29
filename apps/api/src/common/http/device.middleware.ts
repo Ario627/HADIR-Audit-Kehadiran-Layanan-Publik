@@ -7,6 +7,8 @@ const COOKIE_VERSION = 'v1';
 const DEVICE_ID_BYTES = 32;
 const DEVICE_ID_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const SIGNATURE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const DEVICE_BOOTSTRAP_METHOD = 'POST';
+const DEVICE_BOOTSTRAP_PATH = '/v1/devices';
 
 export const DEVICE_COOKIE_MAX_AGE_MS = 180 * 24 * 60 * 60 * 1000;
 
@@ -57,20 +59,26 @@ function readCookie(request: Request, name: string): string | null {
   return typeof value === 'string' ? value : null;
 }
 
+function isDeviceBootstrapRequest(request: Request): boolean {
+  return request.method === DEVICE_BOOTSTRAP_METHOD && request.path === DEVICE_BOOTSTRAP_PATH;
+}
+
 export function deviceMiddleware(request: Request, response: Response, next: NextFunction): void {
   const context = contextOf(request);
   const existing = readCookie(request, env.deviceCookieName);
   const verified = existing === null ? null : verifyDeviceCookie(existing);
   const raw = verified ?? randomBytes(DEVICE_ID_BYTES).toString('base64url');
 
-  if (verified === null) {
+  if (verified === null && isDeviceBootstrapRequest(request)) {
     const options: CookieOptions = {
       httpOnly: true,
       secure: env.cookieSecure,
       sameSite: 'lax',
       path: '/',
       maxAge: DEVICE_COOKIE_MAX_AGE_MS,
+      priority: 'high',
     };
+    response.setHeader('Cache-Control', 'no-store');
     response.cookie(env.deviceCookieName, signDeviceId(raw), options);
   }
 

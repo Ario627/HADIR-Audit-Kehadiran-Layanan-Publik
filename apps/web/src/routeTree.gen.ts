@@ -10,13 +10,43 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LaporRouteImport } from './routes/lapor'
+import { Route as MasukRouteImport } from './routes/masuk'
 import { Route as MetodologiRouteImport } from './routes/metodologi'
+import { Route as PartnerRouteImport } from './routes/partner'
+import { Route as PetaRouteImport } from './routes/peta'
+import { Route as PrivasiRouteImport } from './routes/privasi'
+import { Route as ScanRouteImport } from './routes/scan'
+import { Route as SekitarRouteImport } from './routes/sekitar'
+import { Route as KoridorRouteIdRouteImport } from './routes/koridor.$routeId'
+import { Route as LaporDraftIdRouteImport } from './routes/lapor.$draftId'
+import { Route as LaporanPublicIdRouteImport } from './routes/laporan.$publicId'
+import { Route as PartnerIndexRouteImport } from './routes/partner.index'
+import { Route as PartnerAnalitikRouteImport } from './routes/partner.analitik'
+import { Route as PartnerEksporRouteImport } from './routes/partner.ekspor'
+import { Route as PartnerPengaturanRouteImport } from './routes/partner.pengaturan'
+import { Route as RadarRouteIdRouteImport } from './routes/radar.$routeId'
+import { Route as RingkasanEpisodeIdRouteImport } from './routes/ringkasan.$episodeId'
 import { Route as SStopCodeRouteImport } from './routes/s.$stopCode'
+import { Route as TransparansiIndexRouteImport } from './routes/transparansi.index'
+import { Route as TransparansiDateRouteImport } from './routes/transparansi.$date'
 import { Route as WaitEpisodeIdRouteImport } from './routes/wait.$episodeId'
+import { Route as PartnerLaporanIndexRouteImport } from './routes/partner.laporan.index'
+import { Route as PartnerLaporanPublicIdRouteImport } from './routes/partner.laporan.$publicId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LaporRoute = LaporRouteImport.update({
+  id: '/lapor',
+  path: '/lapor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MasukRoute = MasukRouteImport.update({
+  id: '/masuk',
+  path: '/masuk',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MetodologiRoute = MetodologiRouteImport.update({
@@ -24,9 +54,89 @@ const MetodologiRoute = MetodologiRouteImport.update({
   path: '/metodologi',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PartnerRoute = PartnerRouteImport.update({
+  id: '/partner',
+  path: '/partner',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PetaRoute = PetaRouteImport.update({
+  id: '/peta',
+  path: '/peta',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivasiRoute = PrivasiRouteImport.update({
+  id: '/privasi',
+  path: '/privasi',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScanRoute = ScanRouteImport.update({
+  id: '/scan',
+  path: '/scan',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SekitarRoute = SekitarRouteImport.update({
+  id: '/sekitar',
+  path: '/sekitar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KoridorRouteIdRoute = KoridorRouteIdRouteImport.update({
+  id: '/koridor/$routeId',
+  path: '/koridor/$routeId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LaporDraftIdRoute = LaporDraftIdRouteImport.update({
+  id: '/$draftId',
+  path: '/$draftId',
+  getParentRoute: () => LaporRoute,
+} as any)
+const LaporanPublicIdRoute = LaporanPublicIdRouteImport.update({
+  id: '/laporan/$publicId',
+  path: '/laporan/$publicId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PartnerIndexRoute = PartnerIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PartnerRoute,
+} as any)
+const PartnerAnalitikRoute = PartnerAnalitikRouteImport.update({
+  id: '/analitik',
+  path: '/analitik',
+  getParentRoute: () => PartnerRoute,
+} as any)
+const PartnerEksporRoute = PartnerEksporRouteImport.update({
+  id: '/ekspor',
+  path: '/ekspor',
+  getParentRoute: () => PartnerRoute,
+} as any)
+const PartnerPengaturanRoute = PartnerPengaturanRouteImport.update({
+  id: '/pengaturan',
+  path: '/pengaturan',
+  getParentRoute: () => PartnerRoute,
+} as any)
+const RadarRouteIdRoute = RadarRouteIdRouteImport.update({
+  id: '/radar/$routeId',
+  path: '/radar/$routeId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RingkasanEpisodeIdRoute = RingkasanEpisodeIdRouteImport.update({
+  id: '/ringkasan/$episodeId',
+  path: '/ringkasan/$episodeId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SStopCodeRoute = SStopCodeRouteImport.update({
   id: '/s/$stopCode',
   path: '/s/$stopCode',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TransparansiIndexRoute = TransparansiIndexRouteImport.update({
+  id: '/transparansi/',
+  path: '/transparansi/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TransparansiDateRoute = TransparansiDateRouteImport.update({
+  id: '/transparansi/$date',
+  path: '/transparansi/$date',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WaitEpisodeIdRoute = WaitEpisodeIdRouteImport.update({
@@ -34,39 +144,193 @@ const WaitEpisodeIdRoute = WaitEpisodeIdRouteImport.update({
   path: '/wait/$episodeId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PartnerLaporanIndexRoute = PartnerLaporanIndexRouteImport.update({
+  id: '/laporan/',
+  path: '/laporan/',
+  getParentRoute: () => PartnerRoute,
+} as any)
+const PartnerLaporanPublicIdRoute = PartnerLaporanPublicIdRouteImport.update({
+  id: '/laporan/$publicId',
+  path: '/laporan/$publicId',
+  getParentRoute: () => PartnerRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/lapor': typeof LaporRouteWithChildren
+  '/masuk': typeof MasukRoute
   '/metodologi': typeof MetodologiRoute
+  '/partner': typeof PartnerRouteWithChildren
+  '/peta': typeof PetaRoute
+  '/privasi': typeof PrivasiRoute
+  '/scan': typeof ScanRoute
+  '/sekitar': typeof SekitarRoute
+  '/koridor/$routeId': typeof KoridorRouteIdRoute
+  '/lapor/$draftId': typeof LaporDraftIdRoute
+  '/laporan/$publicId': typeof LaporanPublicIdRoute
+  '/partner/analitik': typeof PartnerAnalitikRoute
+  '/partner/ekspor': typeof PartnerEksporRoute
+  '/partner/pengaturan': typeof PartnerPengaturanRoute
+  '/radar/$routeId': typeof RadarRouteIdRoute
+  '/ringkasan/$episodeId': typeof RingkasanEpisodeIdRoute
   '/s/$stopCode': typeof SStopCodeRoute
+  '/transparansi/$date': typeof TransparansiDateRoute
   '/wait/$episodeId': typeof WaitEpisodeIdRoute
+  '/partner/': typeof PartnerIndexRoute
+  '/transparansi/': typeof TransparansiIndexRoute
+  '/partner/laporan/$publicId': typeof PartnerLaporanPublicIdRoute
+  '/partner/laporan/': typeof PartnerLaporanIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/lapor': typeof LaporRouteWithChildren
+  '/masuk': typeof MasukRoute
   '/metodologi': typeof MetodologiRoute
+  '/peta': typeof PetaRoute
+  '/privasi': typeof PrivasiRoute
+  '/scan': typeof ScanRoute
+  '/sekitar': typeof SekitarRoute
+  '/koridor/$routeId': typeof KoridorRouteIdRoute
+  '/lapor/$draftId': typeof LaporDraftIdRoute
+  '/laporan/$publicId': typeof LaporanPublicIdRoute
+  '/partner/analitik': typeof PartnerAnalitikRoute
+  '/partner/ekspor': typeof PartnerEksporRoute
+  '/partner/pengaturan': typeof PartnerPengaturanRoute
+  '/radar/$routeId': typeof RadarRouteIdRoute
+  '/ringkasan/$episodeId': typeof RingkasanEpisodeIdRoute
   '/s/$stopCode': typeof SStopCodeRoute
+  '/transparansi/$date': typeof TransparansiDateRoute
   '/wait/$episodeId': typeof WaitEpisodeIdRoute
+  '/partner': typeof PartnerIndexRoute
+  '/transparansi': typeof TransparansiIndexRoute
+  '/partner/laporan/$publicId': typeof PartnerLaporanPublicIdRoute
+  '/partner/laporan': typeof PartnerLaporanIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/lapor': typeof LaporRouteWithChildren
+  '/masuk': typeof MasukRoute
   '/metodologi': typeof MetodologiRoute
+  '/partner': typeof PartnerRouteWithChildren
+  '/peta': typeof PetaRoute
+  '/privasi': typeof PrivasiRoute
+  '/scan': typeof ScanRoute
+  '/sekitar': typeof SekitarRoute
+  '/koridor/$routeId': typeof KoridorRouteIdRoute
+  '/lapor/$draftId': typeof LaporDraftIdRoute
+  '/laporan/$publicId': typeof LaporanPublicIdRoute
+  '/partner/analitik': typeof PartnerAnalitikRoute
+  '/partner/ekspor': typeof PartnerEksporRoute
+  '/partner/pengaturan': typeof PartnerPengaturanRoute
+  '/radar/$routeId': typeof RadarRouteIdRoute
+  '/ringkasan/$episodeId': typeof RingkasanEpisodeIdRoute
   '/s/$stopCode': typeof SStopCodeRoute
+  '/transparansi/$date': typeof TransparansiDateRoute
   '/wait/$episodeId': typeof WaitEpisodeIdRoute
+  '/partner/': typeof PartnerIndexRoute
+  '/transparansi/': typeof TransparansiIndexRoute
+  '/partner/laporan/$publicId': typeof PartnerLaporanPublicIdRoute
+  '/partner/laporan/': typeof PartnerLaporanIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/metodologi' | '/s/$stopCode' | '/wait/$episodeId'
+  fullPaths:
+    | '/'
+    | '/lapor'
+    | '/masuk'
+    | '/metodologi'
+    | '/partner'
+    | '/peta'
+    | '/privasi'
+    | '/scan'
+    | '/sekitar'
+    | '/koridor/$routeId'
+    | '/lapor/$draftId'
+    | '/laporan/$publicId'
+    | '/partner/analitik'
+    | '/partner/ekspor'
+    | '/partner/pengaturan'
+    | '/radar/$routeId'
+    | '/ringkasan/$episodeId'
+    | '/s/$stopCode'
+    | '/transparansi/$date'
+    | '/wait/$episodeId'
+    | '/partner/'
+    | '/transparansi/'
+    | '/partner/laporan/$publicId'
+    | '/partner/laporan/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/metodologi' | '/s/$stopCode' | '/wait/$episodeId'
-  id: '__root__' | '/' | '/metodologi' | '/s/$stopCode' | '/wait/$episodeId'
+  to:
+    | '/'
+    | '/lapor'
+    | '/masuk'
+    | '/metodologi'
+    | '/peta'
+    | '/privasi'
+    | '/scan'
+    | '/sekitar'
+    | '/koridor/$routeId'
+    | '/lapor/$draftId'
+    | '/laporan/$publicId'
+    | '/partner/analitik'
+    | '/partner/ekspor'
+    | '/partner/pengaturan'
+    | '/radar/$routeId'
+    | '/ringkasan/$episodeId'
+    | '/s/$stopCode'
+    | '/transparansi/$date'
+    | '/wait/$episodeId'
+    | '/partner'
+    | '/transparansi'
+    | '/partner/laporan/$publicId'
+    | '/partner/laporan'
+  id:
+    | '__root__'
+    | '/'
+    | '/lapor'
+    | '/masuk'
+    | '/metodologi'
+    | '/partner'
+    | '/peta'
+    | '/privasi'
+    | '/scan'
+    | '/sekitar'
+    | '/koridor/$routeId'
+    | '/lapor/$draftId'
+    | '/laporan/$publicId'
+    | '/partner/analitik'
+    | '/partner/ekspor'
+    | '/partner/pengaturan'
+    | '/radar/$routeId'
+    | '/ringkasan/$episodeId'
+    | '/s/$stopCode'
+    | '/transparansi/$date'
+    | '/wait/$episodeId'
+    | '/partner/'
+    | '/transparansi/'
+    | '/partner/laporan/$publicId'
+    | '/partner/laporan/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LaporRoute: typeof LaporRouteWithChildren
+  MasukRoute: typeof MasukRoute
   MetodologiRoute: typeof MetodologiRoute
+  PartnerRoute: typeof PartnerRouteWithChildren
+  PetaRoute: typeof PetaRoute
+  PrivasiRoute: typeof PrivasiRoute
+  ScanRoute: typeof ScanRoute
+  SekitarRoute: typeof SekitarRoute
+  KoridorRouteIdRoute: typeof KoridorRouteIdRoute
+  LaporanPublicIdRoute: typeof LaporanPublicIdRoute
+  RadarRouteIdRoute: typeof RadarRouteIdRoute
+  RingkasanEpisodeIdRoute: typeof RingkasanEpisodeIdRoute
   SStopCodeRoute: typeof SStopCodeRoute
+  TransparansiDateRoute: typeof TransparansiDateRoute
   WaitEpisodeIdRoute: typeof WaitEpisodeIdRoute
+  TransparansiIndexRoute: typeof TransparansiIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -78,11 +342,123 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/lapor': {
+      id: '/lapor'
+      path: '/lapor'
+      fullPath: '/lapor'
+      preLoaderRoute: typeof LaporRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/masuk': {
+      id: '/masuk'
+      path: '/masuk'
+      fullPath: '/masuk'
+      preLoaderRoute: typeof MasukRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/metodologi': {
       id: '/metodologi'
       path: '/metodologi'
       fullPath: '/metodologi'
       preLoaderRoute: typeof MetodologiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/partner': {
+      id: '/partner'
+      path: '/partner'
+      fullPath: '/partner'
+      preLoaderRoute: typeof PartnerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/peta': {
+      id: '/peta'
+      path: '/peta'
+      fullPath: '/peta'
+      preLoaderRoute: typeof PetaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privasi': {
+      id: '/privasi'
+      path: '/privasi'
+      fullPath: '/privasi'
+      preLoaderRoute: typeof PrivasiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/scan': {
+      id: '/scan'
+      path: '/scan'
+      fullPath: '/scan'
+      preLoaderRoute: typeof ScanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sekitar': {
+      id: '/sekitar'
+      path: '/sekitar'
+      fullPath: '/sekitar'
+      preLoaderRoute: typeof SekitarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/koridor/$routeId': {
+      id: '/koridor/$routeId'
+      path: '/koridor/$routeId'
+      fullPath: '/koridor/$routeId'
+      preLoaderRoute: typeof KoridorRouteIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lapor/$draftId': {
+      id: '/lapor/$draftId'
+      path: '/$draftId'
+      fullPath: '/lapor/$draftId'
+      preLoaderRoute: typeof LaporDraftIdRouteImport
+      parentRoute: typeof LaporRoute
+    }
+    '/laporan/$publicId': {
+      id: '/laporan/$publicId'
+      path: '/laporan/$publicId'
+      fullPath: '/laporan/$publicId'
+      preLoaderRoute: typeof LaporanPublicIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/partner/': {
+      id: '/partner/'
+      path: '/'
+      fullPath: '/partner/'
+      preLoaderRoute: typeof PartnerIndexRouteImport
+      parentRoute: typeof PartnerRoute
+    }
+    '/partner/analitik': {
+      id: '/partner/analitik'
+      path: '/analitik'
+      fullPath: '/partner/analitik'
+      preLoaderRoute: typeof PartnerAnalitikRouteImport
+      parentRoute: typeof PartnerRoute
+    }
+    '/partner/ekspor': {
+      id: '/partner/ekspor'
+      path: '/ekspor'
+      fullPath: '/partner/ekspor'
+      preLoaderRoute: typeof PartnerEksporRouteImport
+      parentRoute: typeof PartnerRoute
+    }
+    '/partner/pengaturan': {
+      id: '/partner/pengaturan'
+      path: '/pengaturan'
+      fullPath: '/partner/pengaturan'
+      preLoaderRoute: typeof PartnerPengaturanRouteImport
+      parentRoute: typeof PartnerRoute
+    }
+    '/radar/$routeId': {
+      id: '/radar/$routeId'
+      path: '/radar/$routeId'
+      fullPath: '/radar/$routeId'
+      preLoaderRoute: typeof RadarRouteIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ringkasan/$episodeId': {
+      id: '/ringkasan/$episodeId'
+      path: '/ringkasan/$episodeId'
+      fullPath: '/ringkasan/$episodeId'
+      preLoaderRoute: typeof RingkasanEpisodeIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/s/$stopCode': {
@@ -92,6 +468,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SStopCodeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/transparansi/': {
+      id: '/transparansi/'
+      path: '/transparansi'
+      fullPath: '/transparansi/'
+      preLoaderRoute: typeof TransparansiIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/transparansi/$date': {
+      id: '/transparansi/$date'
+      path: '/transparansi/$date'
+      fullPath: '/transparansi/$date'
+      preLoaderRoute: typeof TransparansiDateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/wait/$episodeId': {
       id: '/wait/$episodeId'
       path: '/wait/$episodeId'
@@ -99,14 +489,72 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WaitEpisodeIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/partner/laporan/': {
+      id: '/partner/laporan/'
+      path: '/laporan'
+      fullPath: '/partner/laporan/'
+      preLoaderRoute: typeof PartnerLaporanIndexRouteImport
+      parentRoute: typeof PartnerRoute
+    }
+    '/partner/laporan/$publicId': {
+      id: '/partner/laporan/$publicId'
+      path: '/laporan/$publicId'
+      fullPath: '/partner/laporan/$publicId'
+      preLoaderRoute: typeof PartnerLaporanPublicIdRouteImport
+      parentRoute: typeof PartnerRoute
+    }
   }
 }
 
+interface LaporRouteChildren {
+  LaporDraftIdRoute: typeof LaporDraftIdRoute
+}
+
+const LaporRouteChildren: LaporRouteChildren = {
+  LaporDraftIdRoute: LaporDraftIdRoute,
+}
+
+const LaporRouteWithChildren = LaporRoute._addFileChildren(LaporRouteChildren)
+
+interface PartnerRouteChildren {
+  PartnerAnalitikRoute: typeof PartnerAnalitikRoute
+  PartnerEksporRoute: typeof PartnerEksporRoute
+  PartnerPengaturanRoute: typeof PartnerPengaturanRoute
+  PartnerIndexRoute: typeof PartnerIndexRoute
+  PartnerLaporanPublicIdRoute: typeof PartnerLaporanPublicIdRoute
+  PartnerLaporanIndexRoute: typeof PartnerLaporanIndexRoute
+}
+
+const PartnerRouteChildren: PartnerRouteChildren = {
+  PartnerAnalitikRoute: PartnerAnalitikRoute,
+  PartnerEksporRoute: PartnerEksporRoute,
+  PartnerPengaturanRoute: PartnerPengaturanRoute,
+  PartnerIndexRoute: PartnerIndexRoute,
+  PartnerLaporanPublicIdRoute: PartnerLaporanPublicIdRoute,
+  PartnerLaporanIndexRoute: PartnerLaporanIndexRoute,
+}
+
+const PartnerRouteWithChildren =
+  PartnerRoute._addFileChildren(PartnerRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LaporRoute: LaporRouteWithChildren,
+  MasukRoute: MasukRoute,
   MetodologiRoute: MetodologiRoute,
+  PartnerRoute: PartnerRouteWithChildren,
+  PetaRoute: PetaRoute,
+  PrivasiRoute: PrivasiRoute,
+  ScanRoute: ScanRoute,
+  SekitarRoute: SekitarRoute,
+  KoridorRouteIdRoute: KoridorRouteIdRoute,
+  LaporanPublicIdRoute: LaporanPublicIdRoute,
+  RadarRouteIdRoute: RadarRouteIdRoute,
+  RingkasanEpisodeIdRoute: RingkasanEpisodeIdRoute,
   SStopCodeRoute: SStopCodeRoute,
+  TransparansiDateRoute: TransparansiDateRoute,
   WaitEpisodeIdRoute: WaitEpisodeIdRoute,
+  TransparansiIndexRoute: TransparansiIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

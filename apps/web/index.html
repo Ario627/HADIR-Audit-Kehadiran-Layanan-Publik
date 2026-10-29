@@ -3,15 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#f2eee3" />
+    <meta name="theme-color" content="#f2eee3" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#12130f" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="format-detection" content="telephone=no" />
     <meta
       name="description"
       content="HADIR mengukur lama tunggu penumpang bus bersubsidi dan mengubahnya menjadi bukti yang bisa ditindaklanjuti."
     />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>HADIR — Audit Kehadiran Layanan</title>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>HADIR membutuhkan JavaScript untuk mencatat dan menampilkan episode tunggu.</noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,49 +1,98 @@
+name: hadir
+
 services:
   postgres:
     image: postgis/postgis:18-3.6
     container_name: hadir-postgres
+    restart: unless-stopped
+    init: true
     environment:
       POSTGRES_USER: hadir
       POSTGRES_PASSWORD: hadir
       POSTGRES_DB: hadir
+      POSTGRES_INITDB_ARGS: --data-checksums
+      TZ: UTC
+      PGTZ: UTC
     ports:
-      - '5432:5432'
+      - '${HADIR_PG_PORT:-5432}:5432'
     volumes:
-      - hadir_pg:/var/lib/postgresql/data
+      - pg:/var/lib/postgresql/data
+    shm_size: 256mb
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U hadir -d hadir']
+      test: ['CMD-SHELL', 'pg_isready -U hadir -d hadir -t 3']
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+      start_period: 30s
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
 
   redis:
     image: redis:8.10
     container_name: hadir-redis
-    command: ['redis-server', '--appendonly', 'yes']
+    restart: unless-stopped
+    init: true
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --appendfsync
+      - everysec
+      - --maxmemory-policy
+      - noeviction
     ports:
-      - '6379:6379'
+      - '${HADIR_REDIS_PORT:-6379}:6379'
     volumes:
-      - hadir_redis:/data
+      - redis:/data
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: hadir-minio
-    command: server /data --console-address ':9001'
+    restart: unless-stopped
+    profiles: ['storage']
+    init: true
+    command: ['server', '/data', '--console-address', ':9001']
     environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio123
+      MINIO_ROOT_USER: ${HADIR_MINIO_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${HADIR_MINIO_PASSWORD:-minio12345}
     ports:
-      - '9000:9000'
-      - '9001:9001'
+      - '${HADIR_MINIO_PORT:-9000}:9000'
+      - '${HADIR_MINIO_CONSOLE_PORT:-9001}:9001'
     volumes:
-      - hadir_minio:/data
+      - minio:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
 
 volumes:
-  hadir_pg:
-  hadir_redis:
-  hadir_minio:
+  pg:
+    name: hadir_pg
+  redis:
+    name: hadir_redis
+  minio:
+    name: hadir_minio

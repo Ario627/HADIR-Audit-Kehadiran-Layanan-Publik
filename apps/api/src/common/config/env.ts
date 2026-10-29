@@ -1,6 +1,23 @@
 import { z } from 'zod';
 
 const DEV_SESSION_SECRET = 'dev-only-insecure-secret-change-me-0000000000';
+const DEV_CONTACT_KEY = Buffer.alloc(32, 11).toString('base64');
+const DEV_REDIS_URL = 'redis://localhost:6379';
+
+const DatabaseUrl = z
+  .string()
+  .min(1)
+  .refine(
+    (value) => {
+      try {
+        const url = new URL(value);
+        return url.protocol === 'postgres:' || url.protocol === 'postgresql:';
+      } catch {
+        return false;
+      }
+    },
+    { message: 'DATABASE_URL harus URL postgres:// atau postgresql://.' },
+  );
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -8,13 +25,61 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
   WEB_ORIGIN: z.string().min(1).default('http://localhost:5173'),
   SESSION_SECRET: z.string().min(32).default(DEV_SESSION_SECRET),
-  DATABASE_URL: z.string().min(1).default('postgres://hadir:hadir@localhost:5432/hadir'),
-  REDIS_URL: z.string().min(1).default('redis://localhost:6379'),
+  PARTNER_SESSION_IDLE_HOURS: z.coerce.number().int().min(1).max(72).default(8),
+  PARTNER_SESSION_ABSOLUTE_DAYS: z.coerce.number().int().min(1).max(30).default(7),
+  PARTNER_SESSION_FRESH_MINUTES: z.coerce.number().int().min(1).max(240).default(30),
+  WEBAUTHN_RP_ID: z.string().min(1).max(253).default('localhost'),
+  WEBAUTHN_ORIGINS: z.string().min(1).default('http://localhost:5173'),
+  ADMIN_SESSION_IDLE_MINUTES: z.coerce.number().int().min(5).max(240).default(20),
+  ADMIN_SESSION_ABSOLUTE_HOURS: z.coerce.number().int().min(1).max(24).default(8),
+  ADMIN_COOKIE_NAME: z.string().min(1).max(64).optional(),
+  INTERNAL_SHARED_SECRET: z.string().min(16).max(512).optional(),
+  METRICS_ENABLED: z.enum(['true', 'false']).default('true'),
+  DATABASE_URL: DatabaseUrl.default('postgres://hadir:hadir@localhost:5432/hadir'),
+  REDIS_URL: z.string().min(1).default(DEV_REDIS_URL),
   QR_KEYRING_JSON: z.string().optional(),
+  CONTACT_ENCRYPTION_KEY: z.string().default(DEV_CONTACT_KEY),
+  UPLOAD_ROOT: z.string().min(1).max(500).default('.uploads'),
   DEV_TOOLS: z.enum(['true', 'false']).default('false'),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(16).default(0),
   BODY_LIMIT: z.string().min(1).default('256kb'),
-});
+  CSRF_TOKEN_TTL_MS: z.coerce.number().int().min(60_000).max(86_400_000).default(28_800_000),
+  EPISODE_TAU_MINUTES: z.coerce.number().int().min(5).max(180).default(45),
+  EPISODE_IDLE_MINUTES: z.coerce.number().int().min(2).max(120).default(10),
+  EPISODE_MAX_MINUTES: z.coerce.number().int().min(15).max(720).default(180),
+  REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(20_000),
+  HEADERS_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
+  KEEP_ALIVE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(5_000),
+  MAX_HEADERS_COUNT: z.coerce.number().int().min(10).max(2_000).default(100),
+  MAX_REQUESTS_PER_SOCKET: z.coerce.number().int().min(1).max(10_000).default(100),
+  DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
+  DB_IDLE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(300_000).default(30_000),
+  DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
+  DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(500).max(60_000).default(10_000),
+  DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
+  DB_LOCK_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
+  DB_MIGRATION_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(600_000).default(120_000),
+  DB_APPLICATION_NAME: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/).default('hadir-api'),
+  DB_SSL_MODE: z.enum(['disable', 'require', 'verify-full']).default('disable'),
+  DB_SSL_CA: z.string().optional(),
+  MIGRATION_DATABASE_URL: DatabaseUrl.optional(),
+})
+  .refine((value) => value.HEADERS_TIMEOUT_MS > value.KEEP_ALIVE_TIMEOUT_MS, {
+    message: 'HEADERS_TIMEOUT_MS harus lebih besar dari KEEP_ALIVE_TIMEOUT_MS.',
+    path: ['HEADERS_TIMEOUT_MS'],
+  })
+  .refine((value) => value.REQUEST_TIMEOUT_MS >= value.HEADERS_TIMEOUT_MS, {
+    message: 'REQUEST_TIMEOUT_MS tidak boleh lebih kecil dari HEADERS_TIMEOUT_MS.',
+    path: ['REQUEST_TIMEOUT_MS'],
+  })
+  .refine((value) => value.EPISODE_IDLE_MINUTES < value.EPISODE_TAU_MINUTES, {
+    message: 'EPISODE_IDLE_MINUTES harus lebih kecil dari EPISODE_TAU_MINUTES.',
+    path: ['EPISODE_IDLE_MINUTES'],
+  })
+  .refine((value) => value.EPISODE_TAU_MINUTES < value.EPISODE_MAX_MINUTES, {
+    message: 'EPISODE_TAU_MINUTES harus lebih kecil dari EPISODE_MAX_MINUTES.',
+    path: ['EPISODE_TAU_MINUTES'],
+  });
 
 function parseOrigin(raw: string): string {
   let url: URL;
@@ -44,6 +109,15 @@ function parseOrigins(raw: string): readonly string[] {
   return Object.freeze([...new Set(origins)]);
 }
 
+function isLocalHost(databaseUrl: string): boolean {
+  try {
+    const host = new URL(databaseUrl).hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
 function formatEnvIssues(issues: readonly z.ZodIssue[]): string {
   return issues
     .map((issue) => `${issue.path.join('.') || 'env'}: ${issue.message}`)
@@ -57,12 +131,37 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
   }
 
   const value = parsed.data;
+  const webOrigins = parseOrigins(value.WEB_ORIGIN);
 
   if (value.NODE_ENV === 'production' && value.SESSION_SECRET === DEV_SESSION_SECRET) {
     throw new Error('SESSION_SECRET wajib diisi dengan secret nyata di production.');
   }
+  if (value.NODE_ENV === 'production' && value.CONTACT_ENCRYPTION_KEY === DEV_CONTACT_KEY) {
+    throw new Error('CONTACT_ENCRYPTION_KEY wajib diisi dengan kunci nyata di production.');
+  }
   if (value.NODE_ENV === 'production' && value.DEV_TOOLS === 'true') {
     throw new Error('DEV_TOOLS tidak boleh aktif di production.');
+  }
+  if (value.NODE_ENV === 'production' && value.REDIS_URL === DEV_REDIS_URL) {
+    throw new Error('REDIS_URL wajib diisi dengan instance nyata di production.');
+  }
+  if (value.NODE_ENV === 'production' && !value.QR_KEYRING_JSON?.trim()) {
+    throw new Error('QR_KEYRING_JSON wajib diisi di production.');
+  }
+  if (
+    value.NODE_ENV === 'production' &&
+    webOrigins.some((origin) => origin.startsWith('http://'))
+  ) {
+    throw new Error('WEB_ORIGIN wajib memakai https di production.');
+  }
+  if (value.NODE_ENV === 'production' && isLocalHost(value.DATABASE_URL)) {
+    throw new Error('DATABASE_URL wajib menunjuk database non-local di production.');
+  }
+  if (value.NODE_ENV === 'production' && value.DB_SSL_MODE !== 'verify-full') {
+    throw new Error('DB_SSL_MODE wajib verify-full di production.');
+  }
+  if (value.NODE_ENV === 'production' && (value.INTERNAL_SHARED_SECRET ?? '').length < 32) {
+    throw new Error('INTERNAL_SHARED_SECRET wajib minimal 32 karakter di production.');
   }
 
   const isProduction = value.NODE_ENV === 'production';
@@ -72,10 +171,33 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
     isProduction,
     isTest: value.NODE_ENV === 'test',
     devTools: value.DEV_TOOLS === 'true' && !isProduction,
-    webOrigins: parseOrigins(value.WEB_ORIGIN),
+    webOrigins,
     deviceCookieName: isProduction ? '__Host-hadir_device' : 'hadir_device',
+    partnerSessionCookieName: isProduction ? '__Host-hadir_session' : 'hadir_session',
+    adminSessionCookieName:
+      value.ADMIN_COOKIE_NAME?.trim() ||
+      (isProduction ? '__Host-hadir_admin' : 'hadir_admin'),
+    adminSessionIdleMs: value.ADMIN_SESSION_IDLE_MINUTES * 60_000,
+    adminSessionAbsoluteMs: value.ADMIN_SESSION_ABSOLUTE_HOURS * 3_600_000,
+    internalSharedSecret: value.INTERNAL_SHARED_SECRET?.trim() || null,
+    metricsEnabled: value.METRICS_ENABLED === 'true',
+    partnerSessionIdleHours: value.PARTNER_SESSION_IDLE_HOURS,
+    partnerSessionAbsoluteDays: value.PARTNER_SESSION_ABSOLUTE_DAYS,
+    partnerSessionFreshMinutes: value.PARTNER_SESSION_FRESH_MINUTES,
+    webauthnRpId: value.WEBAUTHN_RP_ID,
+    webauthnOrigins: value.WEBAUTHN_ORIGINS.split(',')
+      .map((origin) => origin.trim())
+      .filter((origin) => origin.length > 0),
+    csrfCookieName: isProduction ? '__Host-hadir_csrf' : 'hadir_csrf',
     cookieSecure: isProduction,
+    episodeTauMinutes: value.EPISODE_TAU_MINUTES,
+    episodeIdleMinutes: value.EPISODE_IDLE_MINUTES,
+    episodeMaxMinutes: value.EPISODE_MAX_MINUTES,
     qrKeyringJson: value.QR_KEYRING_JSON?.trim() || null,
+    contactEncryptionKey: value.CONTACT_ENCRYPTION_KEY.trim(),
+    uploadRoot: value.UPLOAD_ROOT,
+    dbSslCa: value.DB_SSL_CA?.trim() || null,
+    migrationDatabaseUrl: value.MIGRATION_DATABASE_URL?.trim() || null,
   });
 }
 

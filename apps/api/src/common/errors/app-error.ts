@@ -3,6 +3,8 @@ export type ErrorCode =
   | 'MALFORMED_JSON'
   | 'UNAUTHENTICATED'
   | 'FORBIDDEN'
+  | 'CSRF_MISSING'
+  | 'CSRF_INVALID'
   | 'NOT_FOUND'
   | 'METHOD_NOT_ALLOWED'
   | 'EPISODE_ALREADY_ACTIVE'
@@ -40,6 +42,8 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   MALFORMED_JSON: 400,
   UNAUTHENTICATED: 401,
   FORBIDDEN: 403,
+  CSRF_MISSING: 403,
+  CSRF_INVALID: 403,
   NOT_FOUND: 404,
   METHOD_NOT_ALLOWED: 405,
   EPISODE_ALREADY_ACTIVE: 409,
@@ -65,6 +69,8 @@ const TITLE_BY_CODE: Record<ErrorCode, string> = {
   MALFORMED_JSON: 'Body JSON tidak valid',
   UNAUTHENTICATED: 'Belum terautentikasi',
   FORBIDDEN: 'Tidak punya izin',
+  CSRF_MISSING: 'Token CSRF tidak ditemukan',
+  CSRF_INVALID: 'Token CSRF tidak valid',
   NOT_FOUND: 'Tidak ditemukan',
   METHOD_NOT_ALLOWED: 'Metode tidak didukung',
   EPISODE_ALREADY_ACTIVE: 'Episode sudah aktif',
