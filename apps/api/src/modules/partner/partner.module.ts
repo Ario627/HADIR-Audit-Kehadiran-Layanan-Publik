@@ -6,6 +6,7 @@ import { PartnerCredentialRepository } from '../../db/repositories/partner-crede
 import { PartnerRepository } from '../../db/repositories/partner.repository';
 import { OutboxRepository } from '../../db/repositories/outbox.repository';
 import { ExportRepository } from '../../db/repositories/export.repository';
+import { AccountabilityModule } from '../accountability/accountability.module';
 import { ReportsModule } from '../reports/reports.module';
 import { UploadsModule } from '../uploads/uploads.module';
 import { PartnerAuthService } from './partner-auth.service';
@@ -18,16 +19,21 @@ import { PartnerExportsService } from './partner-exports.service';
 import { PartnerAnalyticsService } from './partner-analytics.service';
 import { PartnerReportsController } from './partner-reports.controller';
 import { PartnerReportsService } from './partner-reports.service';
+import { PartnerAccountabilityController } from '../accountability/accountability-partner.controller';
 import { PartnerController } from './partner.controller';
+import { PartnerMembersController } from './partner-members.controller';
+import { PartnerMembersService } from './partner-members.service';
 import { PartnerService } from './partner.service';
 
 @Module({
-  imports: [AuditModule, ReportsModule, IdempotencyModule, UploadsModule],
+  imports: [AuditModule, ReportsModule, IdempotencyModule, UploadsModule, AccountabilityModule],
   controllers: [
     PartnerController,
     PartnerPasskeyController,
     PartnerReportsController,
     PartnerExportsController,
+    PartnerAccountabilityController,
+    PartnerMembersController,
   ],
   providers: [
     PartnerService,
@@ -38,6 +44,7 @@ import { PartnerService } from './partner.service';
     PartnerReportsService,
     PartnerExportsService,
     PartnerAnalyticsService,
+    PartnerMembersService,
     PartnerRepository,
     PartnerCredentialRepository,
     OutboxRepository,

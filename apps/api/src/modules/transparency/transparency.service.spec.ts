@@ -127,11 +127,66 @@ describe('toTransparencyAnchor', () => {
       txRef: null,
       proof: {},
       createdAt: new Date('2026-10-02T00:05:00.000Z'),
+      signature: null,
+      signatureAlgorithm: null,
+      signingKeyId: null,
+      publicKey: null,
+      signedAt: null,
     });
     expect(anchor.merkleRoot).toBe(Buffer.alloc(32, 3).toString('base64'));
     expect(anchor.eventCount).toBe(12);
     expect(anchor.verifyUrl).toBe(verifyUrlFor('2026-10-01'));
     expect(anchor.publishedAt).toBe('2026-10-02T00:05:00.000Z');
+    expect(anchor.signature).toBeNull();
+    expect(anchor.payloadDigest.length).toBeGreaterThan(20);
+    expect(anchor.caveat).toContain('integritas');
+  });
+
+  it('exposes a complete signature when the anchor is signed', () => {
+    const signature = Buffer.alloc(64, 4);
+    const publicKey = Buffer.alloc(32, 2);
+    const signedAt = new Date('2026-10-02T00:06:00.000Z');
+    const anchor = toTransparencyAnchor({
+      anchorDate: '2026-10-01',
+      merkleRoot: Buffer.alloc(32, 3),
+      leafCount: 12,
+      windowStart: new Date('2026-10-01T00:00:00.000Z'),
+      windowEnd: new Date('2026-10-02T00:00:00.000Z'),
+      txRef: null,
+      proof: {},
+      createdAt: new Date('2026-10-02T00:05:00.000Z'),
+      signature,
+      signatureAlgorithm: 'ed25519',
+      signingKeyId: 'anchor-2026-10',
+      publicKey,
+      signedAt,
+    });
+    expect(anchor.signature).toEqual({
+      algorithm: 'ed25519',
+      keyId: 'anchor-2026-10',
+      signature: signature.toString('base64'),
+      publicKey: publicKey.toString('base64'),
+      signedAt: signedAt.toISOString(),
+    });
+  });
+
+  it('drops a partial signature instead of publishing half of it', () => {
+    const anchor = toTransparencyAnchor({
+      anchorDate: '2026-10-01',
+      merkleRoot: Buffer.alloc(32, 3),
+      leafCount: 12,
+      windowStart: new Date('2026-10-01T00:00:00.000Z'),
+      windowEnd: new Date('2026-10-02T00:00:00.000Z'),
+      txRef: null,
+      proof: {},
+      createdAt: new Date('2026-10-02T00:05:00.000Z'),
+      signature: Buffer.alloc(64, 4),
+      signatureAlgorithm: 'ed25519',
+      signingKeyId: 'anchor-2026-10',
+      publicKey: null,
+      signedAt: null,
+    });
+    expect(anchor.signature).toBeNull();
   });
 });
 
@@ -149,6 +204,11 @@ describe('TransparencyService.seal', () => {
         txRef: null,
         proof: {},
         createdAt: new Date('2026-10-02T00:00:01.000Z'),
+        signature: null,
+        signatureAlgorithm: null,
+        signingKeyId: null,
+        publicKey: null,
+        signedAt: null,
       }),
       ...overrides,
     }) as unknown as ChainRepository;
@@ -185,6 +245,11 @@ describe('TransparencyService.seal', () => {
       txRef: null,
       proof: {},
       createdAt: new Date('2026-10-02T00:00:00.000Z'),
+      signature: null,
+      signatureAlgorithm: null,
+      signingKeyId: null,
+      publicKey: null,
+      signedAt: null,
     };
     let insertCalls = 0;
     const service = new TransparencyService(

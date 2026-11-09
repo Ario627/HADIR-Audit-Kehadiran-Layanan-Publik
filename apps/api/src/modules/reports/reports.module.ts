@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuditModule } from '../../common/audit/audit.module';
 import { IdempotencyModule } from '../../common/idempotency/idempotency.module';
 import { UploadsModule } from '../uploads/uploads.module';
+import { AccountabilityRepository } from '../../db/repositories/accountability.repository';
 import { DevicesRepository } from '../../db/repositories/devices.repository';
 import { ReportsRepository } from '../../db/repositories/reports.repository';
 import { ReportsController } from './reports.controller';
@@ -11,7 +12,13 @@ import { ReportsService } from './reports.service';
 @Module({
   imports: [AuditModule, IdempotencyModule, UploadsModule],
   controllers: [ReportsController],
-  providers: [ReportsService, ReportsMediaService, ReportsRepository, DevicesRepository],
+  providers: [
+    ReportsService,
+    ReportsMediaService,
+    ReportsRepository,
+    DevicesRepository,
+    AccountabilityRepository,
+  ],
   exports: [ReportsService, ReportsRepository],
 })
 export class ReportsModule {}

@@ -130,10 +130,18 @@ CREATE TABLE anchor_log (
   window_end timestamp with time zone NOT NULL,
   tx_ref text,
   proof jsonb NOT NULL DEFAULT '{}'::jsonb,
+  signature bytea,
+  signature_algorithm text,
+  signing_key_id text,
+  public_key bytea,
+  signed_at timestamp with time zone,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT ck_anchor_log_root CHECK (octet_length(merkle_root) = 32),
   CONSTRAINT ck_anchor_log_count CHECK (leaf_count >= 0),
-  CONSTRAINT ck_anchor_log_window CHECK (window_start < window_end)
+  CONSTRAINT ck_anchor_log_window CHECK (window_start < window_end),
+  CONSTRAINT ck_anchor_log_signature_bytes CHECK (signature IS NULL OR octet_length(signature) = 64),
+  CONSTRAINT ck_anchor_log_public_key_bytes CHECK (public_key IS NULL OR octet_length(public_key) = 32),
+  CONSTRAINT ck_anchor_log_algorithm CHECK (signature_algorithm IS NULL OR signature_algorithm IN ('ed25519'))
 );
 
 CREATE TABLE exports (
@@ -153,6 +161,24 @@ CREATE TABLE exports (
   CONSTRAINT ck_exports_format CHECK (format IN ('csv', 'open311')),
   CONSTRAINT ck_exports_status CHECK (status IN ('queued','running','ready','failed','expired')),
   CONSTRAINT ck_exports_ready CHECK ((status = 'ready') = (object_key IS NOT NULL))
+);
+
+CREATE TABLE retention_runs (
+  id uuid PRIMARY KEY DEFAULT uuidv7(),
+  started_at timestamp with time zone NOT NULL DEFAULT now(),
+  finished_at timestamp with time zone,
+  rows_removed integer NOT NULL DEFAULT 0,
+  datasets jsonb NOT NULL DEFAULT '{}'::jsonb,
+  triggered_by text NOT NULL DEFAULT 'worker',
+  error_code text
+);
+
+CREATE TABLE retention_overrides (
+  dataset text PRIMARY KEY,
+  retention_days integer NOT NULL,
+  reason text NOT NULL,
+  updated_by uuid REFERENCES platform_admins(id) ON DELETE SET NULL,
+  updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
 CREATE TABLE feature_flags (
@@ -251,6 +277,9 @@ GRANT SELECT ON institutions TO hadir_app;
 GRANT SELECT ON stops TO hadir_app;
 GRANT SELECT ON anchor_log TO hadir_app;
 GRANT INSERT ON anchor_log TO hadir_app;
+GRANT UPDATE ON anchor_log TO hadir_app;
+GRANT SELECT, INSERT, UPDATE ON retention_runs TO hadir_app;
+GRANT SELECT, INSERT, UPDATE ON retention_overrides TO hadir_app;
 GRANT SELECT, INSERT, UPDATE ON exports TO hadir_app;
 GRANT SELECT, INSERT, UPDATE ON feature_flags TO hadir_app;
 GRANT SELECT, INSERT, UPDATE ON rup_packages TO hadir_app;

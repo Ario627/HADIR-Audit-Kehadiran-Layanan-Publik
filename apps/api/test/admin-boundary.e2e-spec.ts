@@ -84,6 +84,9 @@ describeBoundary('admin and privacy boundary against real PostgreSQL', () => {
     await pool.query(await readFile(resolve(MIGRATIONS, '0017_read_scopes.sql'), 'utf8'));
     await pool.query(await readFile(resolve(MIGRATIONS, '0022_admin_rls.sql'), 'utf8'));
     await pool.query(
+      await readFile(resolve(MIGRATIONS, '0025_fix_media_public_policy.sql'), 'utf8'),
+    );
+    await pool.query(
       await readFile(resolve(MIGRATIONS, '0023_contact_withdrawal.sql'), 'utf8'),
     );
 
@@ -430,6 +433,118 @@ describeBoundary('admin and privacy boundary against real PostgreSQL', () => {
       );
       const stored = await chain.findAnchor(db, '2026-10-01');
       expect(merkleRoot(leaves).equals(stored!.merkleRoot)).toBe(true);
+    });
+
+    it('attaches a signature exactly once and never overwrites it', async () => {
+      const leaves = [Buffer.alloc(32, 4)];
+      const summary = merkleSummary(leaves);
+      await asAdmin(
+        async (tx) =>
+          chain.insertAnchor(tx, {
+            anchorDate: '2026-10-06',
+            merkleRoot: summary.root,
+            leafCount: 1,
+            windowStart: new Date('2026-10-06T00:00:00.000Z'),
+            windowEnd: new Date('2026-10-07T00:00:00.000Z'),
+            proof: {},
+          }),
+        true,
+      );
+
+      const signature = Buffer.alloc(64, 5);
+      const publicKey = Buffer.alloc(32, 6);
+      const signedAt = new Date('2026-10-07T00:10:00.000Z');
+
+      const first = await asAdmin(
+        async (tx) =>
+          chain.attachSignature(tx, '2026-10-06', {
+            signature,
+            signatureAlgorithm: 'ed25519',
+            signingKeyId: 'anchor-test',
+            publicKey,
+            signedAt,
+          }),
+        true,
+      );
+      expect(first?.signature?.equals(signature)).toBe(true);
+      expect(first?.signingKeyId).toBe('anchor-test');
+      expect(first?.signedAt?.toISOString()).toBe(signedAt.toISOString());
+
+      const second = await asAdmin(
+        async (tx) =>
+          chain.attachSignature(tx, '2026-10-06', {
+            signature: Buffer.alloc(64, 9),
+            signatureAlgorithm: 'ed25519',
+            signingKeyId: 'anchor-other',
+            publicKey,
+            signedAt,
+          }),
+        true,
+      );
+      expect(second).toBeNull();
+
+      const stored = await chain.findAnchor(db, '2026-10-06');
+      expect(stored?.signingKeyId).toBe('anchor-test');
+      expect(stored?.signature?.equals(signature)).toBe(true);
+    });
+
+    it('refuses a signature shorter than Ed25519 output', async () => {
+      await asAdmin(
+        async (tx) =>
+          chain.insertAnchor(tx, {
+            anchorDate: '2026-10-08',
+            merkleRoot: Buffer.alloc(32, 11),
+            leafCount: 1,
+            windowStart: new Date('2026-10-08T00:00:00.000Z'),
+            windowEnd: new Date('2026-10-09T00:00:00.000Z'),
+            proof: {},
+          }),
+        true,
+      );
+      await expect(
+        asAdmin(
+          async (tx) =>
+            chain.attachSignature(tx, '2026-10-08', {
+              signature: Buffer.alloc(63, 1),
+              signatureAlgorithm: 'ed25519',
+              signingKeyId: 'anchor-test',
+              publicKey: Buffer.alloc(32, 1),
+              signedAt: new Date('2026-10-09T00:10:00.000Z'),
+            }),
+          true,
+        ),
+      ).rejects.toThrow();
+    });
+
+    it('refuses an unsupported signature algorithm', async () => {
+      await expect(
+        asAdmin(
+          async (tx) =>
+            chain.attachSignature(tx, '2026-10-08', {
+              signature: Buffer.alloc(64, 1),
+              signatureAlgorithm: 'rsa-sha256',
+              signingKeyId: 'anchor-test',
+              publicKey: Buffer.alloc(32, 1),
+              signedAt: new Date('2026-10-09T00:10:00.000Z'),
+            }),
+          true,
+        ),
+      ).rejects.toThrow();
+    });
+
+    it('lists anchor rows between two dates in order', async () => {
+      const rows = await chain.listAnchorsBetween(db, '2026-10-01', '2026-10-06');
+      expect(rows.map((row) => row.anchorDate)).toEqual([
+        '2026-10-01',
+        '2026-10-06',
+      ]);
+    });
+
+    it('reports public key usage grouped by key id', async () => {
+      const usage = await chain.listPublicKeyUsage(db);
+      expect(usage).toHaveLength(1);
+      expect(usage[0]?.keyId).toBe('anchor-test');
+      expect(usage[0]?.count).toBe(1);
     });
 
     it('rejects a root that is not thirty two bytes', async () => {

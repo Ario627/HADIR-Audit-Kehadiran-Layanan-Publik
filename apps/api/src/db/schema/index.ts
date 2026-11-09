@@ -6,3 +6,4 @@ export * from './reports';
 export * from './runway';
 export * from './admin';
 export * from './transparency';
+export * from './accountability';
