@@ -16,3 +16,4 @@ export * from './export';
 export * from './internal';
 export * from './commitment';
 export * from './accountability';
+export * from './governance';

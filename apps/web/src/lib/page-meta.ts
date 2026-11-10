@@ -62,6 +62,12 @@ const PAGES: Readonly<Record<string, PageMeta>> = {
       'Formulir laporan dengan cerita kejadian, foto opsional, dan pernyataan publikasi. Draf tersimpan di perangkat ini.',
     noindex: true,
   },
+  '/instansi': {
+    title: 'Kinerja instansi',
+    description:
+      'Skor proses per instansi: respons, ketepatan tenggat, integritas klaim selesai, dan keadilan banding. Sampel kecil tidak diberi peringkat.',
+    noindex: false,
+  },
   '/laporan/$publicId': {
     title: 'Detail laporan',
     description:

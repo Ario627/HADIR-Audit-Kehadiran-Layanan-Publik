@@ -41,6 +41,26 @@ export const MilestoneKey = z.enum([
 
 export type MilestoneKey = z.infer<typeof MilestoneKey>;
 
+export const ResponseAttestation = z.object({
+  signed: z.boolean(),
+  status: z.enum([
+    'unsigned',
+    'verified',
+    'signature_mismatch',
+    'unsupported_algorithm',
+    'payload_mismatch',
+    'structural_invalid',
+  ]),
+  bodyDigest: z.string().length(64).nullable(),
+  signingKeyId: z.string().max(64).nullable(),
+  keyFingerprint: z.string().max(20).nullable(),
+  algorithm: z.string().max(40).nullable(),
+  signedAt: IsoDateTime.nullable(),
+  message: z.string().min(1).max(400),
+});
+
+export type ResponseAttestation = z.infer<typeof ResponseAttestation>;
+
 export const ReportResponse = z.object({
   id: Uuid,
   kind: ResponseKind,
@@ -51,6 +71,7 @@ export const ReportResponse = z.object({
   authorDisplayName: z.string().max(120).nullable(),
   correctsResponseId: Uuid.nullable(),
   publishedAt: IsoDateTime,
+  attestation: ResponseAttestation.nullable(),
 });
 
 export type ReportResponse = z.infer<typeof ReportResponse>;

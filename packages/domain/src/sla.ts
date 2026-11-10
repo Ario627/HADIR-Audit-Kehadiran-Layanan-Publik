@@ -59,6 +59,22 @@ const HOUR_MS = 3_600_000;
 
 export const SLA_POLICY_VERSION = 'sla-v1';
 
+export interface SlaTargetOverride {
+  cityId: string;
+  priority: SlaPriority;
+  acknowledgeHours: number;
+  respondHours: number;
+  resolveHours: number;
+  sourceUrl: string;
+}
+
+export interface ResolvedTargets {
+  targets: SlaTargets;
+  source: 'city_override' | 'base_policy';
+  cityId: string | null;
+  note: string;
+}
+
 const BASE_TARGETS: Readonly<Record<SlaPriority, SlaTargets>> = Object.freeze({
   critical: { acknowledgeHours: 2, respondHours: 8, resolveHours: 24 },
   high: { acknowledgeHours: 8, respondHours: 24, resolveHours: 72 },
@@ -152,6 +168,67 @@ export function slaTargetsFor(priority: SlaPriority): SlaTargets {
     acknowledgeHours: targets.acknowledgeHours,
     respondHours: targets.respondHours,
     resolveHours: targets.resolveHours,
+  };
+}
+
+export function resolveSlaTargets(
+  priority: SlaPriority,
+  cityId: string | null,
+  overrides: readonly SlaTargetOverride[],
+): ResolvedTargets {
+  const base = slaTargetsFor(priority);
+  if (cityId === null) {
+    return {
+      targets: base,
+      source: 'base_policy',
+      cityId: null,
+      note: 'Laporan tanpa kota memakai target dasar.',
+    };
+  }
+  const match = overrides.find(
+    (entry) => entry.cityId === cityId && entry.priority === priority,
+  );
+  if (match === undefined) {
+    return {
+      targets: base,
+      source: 'base_policy',
+      cityId,
+      note: 'Kota ini memakai target dasar.',
+    };
+  }
+  const overridden: SlaTargets = {
+    acknowledgeHours: match.acknowledgeHours,
+    respondHours: match.respondHours,
+    resolveHours: match.resolveHours,
+  };
+  if (
+    overridden.acknowledgeHours <= 0 ||
+    overridden.respondHours < overridden.acknowledgeHours ||
+    overridden.resolveHours < overridden.respondHours
+  ) {
+    return {
+      targets: base,
+      source: 'base_policy',
+      cityId,
+      note: 'Override kota tidak konsisten; target dasar dipakai.',
+    };
+  }
+  if (
+    overridden.acknowledgeHours > base.acknowledgeHours ||
+    overridden.resolveHours > base.resolveHours
+  ) {
+    return {
+      targets: base,
+      source: 'base_policy',
+      cityId,
+      note: 'Override kota lebih longgar dari target dasar; ditolak.',
+    };
+  }
+  return {
+    targets: overridden,
+    source: 'city_override',
+    cityId,
+    note: 'Target kota berlaku dan tidak boleh lebih longgar dari target dasar.',
   };
 }
 

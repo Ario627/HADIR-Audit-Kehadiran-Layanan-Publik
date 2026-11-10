@@ -1,5 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  ATTESTATION_ALGORITHM,
+  attestationCaveats,
+  canonicalResponsePayload,
   decideResolution,
   describeSlaPhase,
   milestoneCaveats,
@@ -13,6 +16,9 @@ import {
   slaCaveats,
   slaEscalationLine,
   slaReport,
+  signingKeyFingerprint,
+  verifyResponseAttestation,
+  type AttestationEnvelope,
   type MilestoneEvent as DomainMilestoneEvent,
   type ResolutionClaim,
   type ResolutionVerification as DomainVerification,
@@ -23,6 +29,7 @@ import {
 import type {
   CaseFile,
   ReportResponse,
+  ResponseAttestation as ResponseAttestationView,
   ResolutionVerifyInput,
   ResolutionVerifyResult,
   ResponseCreate,
@@ -31,6 +38,12 @@ import type {
 } from '@hadir/contracts';
 import { AppError } from '../../common/errors/app-error';
 import { AuditService } from '../../common/audit/audit.service';
+import { env } from '../../common/config/env';
+import {
+  createResponseSigner,
+  verifyResponseSignature,
+} from '../../common/crypto/response-signer';
+import { createHash } from 'node:crypto';
 import type { PartnerSession } from '../../common/auth/partner-session';
 import { TRANSACTION_RUNNER, type TransactionRunner } from '../../db/transaction-runner';
 import { db } from '../../db/client';
@@ -45,6 +58,20 @@ import {
 import { ReportsRepository } from '../../db/repositories/reports.repository';
 
 const HOUR_MS = 3_600_000;
+
+function responseSigner(): ReturnType<typeof createResponseSigner> | null {
+  if (env.responseSigningKey === null || env.responseSigningKeyId === null) {
+    return null;
+  }
+  return createResponseSigner({
+    privateKey: env.responseSigningKey,
+    keyId: env.responseSigningKeyId,
+  });
+}
+
+function sha256Hex(value: string): Buffer {
+  return createHash('sha256').update(value, 'utf8').digest();
+}
 const SLA_PHASES = ['acknowledge', 'respond', 'resolve'] as const;
 
 function iso(value: Date | null): string | null {
@@ -117,6 +144,52 @@ function verifierLabelOf(
     return 'Pemeriksaan otomatis';
   }
   return 'Institusi independen';
+}
+
+function attestationView(
+  input: {
+    body: string;
+    reportPublicId: string;
+    institutionId: string;
+    kind: string;
+    evidenceUrls: readonly string[];
+    publishedAt: Date;
+    correctsResponseId: string | null;
+    bodyDigestHex: string | null;
+    signatureBase64: string | null;
+    signatureAlgorithm: string | null;
+    signingKeyId: string | null;
+    publicKeyBase64: string | null;
+    signedAt: Date | null;
+  },
+): ResponseAttestationView {
+  const envelope: AttestationEnvelope = {
+    reportPublicId: input.reportPublicId,
+    institutionId: input.institutionId,
+    kind: input.kind,
+    bodyDigestHex: input.bodyDigestHex ?? '',
+    evidenceUrls: [...input.evidenceUrls],
+    publishedAt: input.publishedAt.toISOString(),
+    correctsResponseId: input.correctsResponseId,
+    signatureBase64: input.signatureBase64,
+    signatureAlgorithm: input.signatureAlgorithm,
+    signingKeyId: input.signingKeyId,
+    publicKeyBase64: input.publicKeyBase64,
+    signedAt: input.signedAt === null ? null : input.signedAt.toISOString(),
+  };
+  const verification = verifyResponseAttestation(envelope, (payload, signature, key) =>
+    verifyResponseSignature({ payload, publicKeyBase64: key, signatureBase64: signature }),
+  );
+  return {
+    signed: verification.signed,
+    status: verification.status,
+    bodyDigest: input.bodyDigestHex,
+    signingKeyId: input.signingKeyId,
+    keyFingerprint: signingKeyFingerprint(input.publicKeyBase64),
+    algorithm: input.signatureAlgorithm,
+    signedAt: input.signedAt === null ? null : input.signedAt.toISOString(),
+    message: verification.message,
+  };
 }
 
 function closureToVerification(row: ClosureRow): DomainVerification {
@@ -271,7 +344,11 @@ export class AccountabilityService {
         })),
         cautions: [...resolutionCautions(claim, domainVerifications)].slice(0, 10),
       },
-      caveats: [...resolutionCaveats(), ...slaCaveats()].slice(0, 10),
+      caveats: [
+        ...resolutionCaveats(),
+        ...slaCaveats(),
+        ...attestationCaveats(),
+      ].slice(0, 10),
     };
   }
 
@@ -283,31 +360,54 @@ export class AccountabilityService {
         if (caseRow === null) {
           return null;
         }
-        const [events, responses, verifications, closures, sla] = await Promise.all([
-          this.repository.listEvents(tx, caseRow.id),
-          this.repository.listResponses(tx, caseRow.id),
-          this.repository.listVerifications(tx, caseRow.id),
-          this.repository.listClosureAnswers(tx, caseRow.id),
-          this.repository.findSla(tx, caseRow.id),
-        ]);
-        return { caseRow, events, responses, verifications, closures, sla };
+        const [events, responses, verifications, closures, attestations, sla] =
+          await Promise.all([
+            this.repository.listEvents(tx, caseRow.id),
+            this.repository.listResponses(tx, caseRow.id),
+            this.repository.listVerifications(tx, caseRow.id),
+            this.repository.listClosureAnswers(tx, caseRow.id),
+            this.repository.listAttestations(tx, caseRow.id),
+            this.repository.findSla(tx, caseRow.id),
+          ]);
+        return { caseRow, events, responses, verifications, closures, attestations, sla };
       },
       { scope: 'public', requestId: 'accountability-public' },
     );
     if (loaded === null) {
       throw new AppError('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
     }
-    const mapped: ReportResponse[] = loaded.responses.map((response) => ({
-      id: response.id,
-      kind: response.kind,
-      body: response.body,
-      evidenceUrls: [...response.evidenceUrls],
-      institutionId: response.institutionId,
-      institutionName: response.institutionName,
-      authorDisplayName: response.authorDisplayName,
-      correctsResponseId: response.correctsResponseId,
-      publishedAt: response.publishedAt.toISOString(),
-    }));
+    const attestations = new Map(
+      loaded.attestations.map((entry) => [entry.responseId, entry]),
+    );
+    const mapped: ReportResponse[] = loaded.responses.map((response) => {
+      const record = attestations.get(response.id);
+      return {
+        id: response.id,
+        kind: response.kind,
+        body: response.body,
+        evidenceUrls: [...response.evidenceUrls],
+        institutionId: response.institutionId,
+        institutionName: response.institutionName,
+        authorDisplayName: response.authorDisplayName,
+        correctsResponseId: response.correctsResponseId,
+        publishedAt: response.publishedAt.toISOString(),
+        attestation: attestationView({
+          body: response.body,
+          reportPublicId: loaded.caseRow.publicId,
+          institutionId: response.institutionId,
+          kind: response.kind,
+          evidenceUrls: response.evidenceUrls,
+          publishedAt: response.publishedAt,
+          correctsResponseId: response.correctsResponseId,
+          bodyDigestHex: record?.bodyDigestHex ?? null,
+          signatureBase64: record?.signatureBase64 ?? null,
+          signatureAlgorithm: record?.signatureAlgorithm ?? null,
+          signingKeyId: record?.signingKeyId ?? null,
+          publicKeyBase64: record?.publicKeyBase64 ?? null,
+          signedAt: record?.signedAt ?? null,
+        }),
+      };
+    });
     return this.buildCaseFile(
       loaded.caseRow,
       loaded.events,
@@ -330,14 +430,16 @@ export class AccountabilityService {
         if (caseRow === null || caseRow.institutionId !== session.institutionId) {
           return null;
         }
-        const [events, responses, verifications, closures, sla] = await Promise.all([
-          this.repository.listEvents(tx, caseRow.id),
-          this.repository.listResponses(tx, caseRow.id),
-          this.repository.listVerifications(tx, caseRow.id),
-          this.repository.listClosureAnswers(tx, caseRow.id),
-          this.repository.findSla(tx, caseRow.id),
-        ]);
-        return { caseRow, events, responses, verifications, closures, sla };
+        const [events, responses, verifications, closures, attestations, sla] =
+          await Promise.all([
+            this.repository.listEvents(tx, caseRow.id),
+            this.repository.listResponses(tx, caseRow.id),
+            this.repository.listVerifications(tx, caseRow.id),
+            this.repository.listClosureAnswers(tx, caseRow.id),
+            this.repository.listAttestations(tx, caseRow.id),
+            this.repository.findSla(tx, caseRow.id),
+          ]);
+        return { caseRow, events, responses, verifications, closures, attestations, sla };
       },
       {
         scope: 'partner',
@@ -349,17 +451,38 @@ export class AccountabilityService {
     if (loaded === null) {
       throw new AppError('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
     }
-    const mapped: ReportResponse[] = loaded.responses.map((response) => ({
-      id: response.id,
-      kind: response.kind,
-      body: response.body,
-      evidenceUrls: [...response.evidenceUrls],
-      institutionId: response.institutionId,
-      institutionName: response.institutionName,
-      authorDisplayName: response.authorDisplayName,
-      correctsResponseId: response.correctsResponseId,
-      publishedAt: response.publishedAt.toISOString(),
-    }));
+    const attestations = new Map(
+      loaded.attestations.map((entry) => [entry.responseId, entry]),
+    );
+    const mapped: ReportResponse[] = loaded.responses.map((response) => {
+      const record = attestations.get(response.id);
+      return {
+        id: response.id,
+        kind: response.kind,
+        body: response.body,
+        evidenceUrls: [...response.evidenceUrls],
+        institutionId: response.institutionId,
+        institutionName: response.institutionName,
+        authorDisplayName: response.authorDisplayName,
+        correctsResponseId: response.correctsResponseId,
+        publishedAt: response.publishedAt.toISOString(),
+        attestation: attestationView({
+          body: response.body,
+          reportPublicId: loaded.caseRow.publicId,
+          institutionId: response.institutionId,
+          kind: response.kind,
+          evidenceUrls: response.evidenceUrls,
+          publishedAt: response.publishedAt,
+          correctsResponseId: response.correctsResponseId,
+          bodyDigestHex: record?.bodyDigestHex ?? null,
+          signatureBase64: record?.signatureBase64 ?? null,
+          signatureAlgorithm: record?.signatureAlgorithm ?? null,
+          signingKeyId: record?.signingKeyId ?? null,
+          publicKeyBase64: record?.publicKeyBase64 ?? null,
+          signedAt: record?.signedAt ?? null,
+        }),
+      };
+    });
     return this.buildCaseFile(
       loaded.caseRow,
       loaded.events,
@@ -391,6 +514,23 @@ export class AccountabilityService {
             detail: `Tanggapan tidak dapat ditambahkan pada status ${caseRow.status}.`,
           });
         }
+        const publishedAt = new Date();
+        const signer = responseSigner();
+        const digest = sha256Hex(input.body);
+        const signature =
+          signer === null
+            ? null
+            : signer.sign(
+                canonicalResponsePayload({
+                  reportPublicId: publicId,
+                  institutionId: session.institutionId,
+                  kind: input.kind,
+                  bodyDigestHex: digest.toString('hex'),
+                  evidenceUrls: input.evidenceUrls,
+                  publishedAt: publishedAt.toISOString(),
+                  correctsResponseId: input.correctsResponseId ?? null,
+                }),
+              );
         const responseId = await this.repository.insertResponse(tx, {
           reportId: caseRow.id,
           institutionId: session.institutionId,
@@ -399,6 +539,18 @@ export class AccountabilityService {
           body: input.body,
           evidenceUrls: input.evidenceUrls,
           correctsResponseId: input.correctsResponseId ?? null,
+          publishedAt,
+          attestation:
+            signer === null || signature === null
+              ? null
+              : {
+                  bodyDigest: digest,
+                  signature,
+                  algorithm: ATTESTATION_ALGORITHM,
+                  keyId: signer.keyId,
+                  publicKey: Buffer.from(signer.publicKeyBase64, 'base64'),
+                  signedAt: publishedAt,
+                },
         });
         await this.reports.appendEvent(tx, caseRow.id, {
           kind: 'responded',
@@ -412,7 +564,29 @@ export class AccountabilityService {
           },
           sourceUrl: input.evidenceUrls[0] ?? null,
         });
-        return { responseId, caseRow };
+        return {
+          responseId,
+          caseRow,
+          publishedAt,
+          attestation:
+            signer === null || signature === null
+              ? null
+              : attestationView({
+                  body: input.body,
+                  reportPublicId: publicId,
+                  institutionId: session.institutionId,
+                  kind: input.kind,
+                  evidenceUrls: input.evidenceUrls,
+                  publishedAt,
+                  correctsResponseId: input.correctsResponseId ?? null,
+                  bodyDigestHex: digest.toString('hex'),
+                  signatureBase64: signature.toString('base64'),
+                  signatureAlgorithm: ATTESTATION_ALGORITHM,
+                  signingKeyId: signer.keyId,
+                  publicKeyBase64: signer.publicKeyBase64,
+                  signedAt: publishedAt,
+                }),
+        };
       },
       {
         scope: 'partner',
@@ -446,7 +620,8 @@ export class AccountabilityService {
       institutionName: session.institutionName,
       authorDisplayName: session.displayName,
       correctsResponseId: input.correctsResponseId ?? null,
-      publishedAt: new Date().toISOString(),
+      publishedAt: created.publishedAt.toISOString(),
+      attestation: created.attestation,
     };
   }
 

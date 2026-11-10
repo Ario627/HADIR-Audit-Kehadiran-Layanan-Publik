@@ -381,7 +381,29 @@ Keadaan saat README ini ditulis:
 | Paket | Berkas suite | Tes | Alat |
 |---|---|---|---|
 | `@hadir/web` | 40 | 783 | Vitest |
-| `@hadir/api` | 46 | 496 | Jest |
+| `@hadir/domain` | 22 | 510 | Vitest |
+| `@hadir/api` (unit) | 50 | 585 | Jest |
+
+Suite yang memerlukan PostgreSQL sungguhan dijalankan terpisah, satu per satu,
+karena masing-masing memulai dengan `DROP SCHEMA public CASCADE`:
+
+| Suite | Tes | Yang dibuktikan |
+|---|---|---|
+| `demo-flow` | 10 | Seluruh rantai migrasi 0001→0030 dari database kosong, lalu tujuh alur demo |
+| `admin-boundary` | 42 | RLS, anchor, retensi, moderasi |
+| `accountability-boundary` | 24 | Append-only tanggapan, tanda tangan, SLA beku, undangan |
+| `governance-boundary` | 23 | Panel satu kota, banding, vonis panel |
+| `partner-boundary` | 17 | BOLA mitra, k-anonymity |
+| `authorization-matrix` | 16 | Setiap rute terdaftar, 401/403, CSRF |
+| `evidence-boundary` | 15 | Janji layanan, snapshot, konteks |
+| `partner-http` | 13 | Boot `AppModule` sungguhan |
+
+```bash
+export HADIR_BOUNDARY_DATABASE_URL=postgresql://postgres@localhost:5432/hadir_test
+cd apps/api
+NODE_OPTIONS=--experimental-vm-modules pnpm exec jest \
+  --config test/jest-e2e.json test/demo-flow.e2e-spec.ts
+```
 
 Yang diuji bukan hanya fungsi murni, tetapi juga hal yang mudah rusak tanpa terlihat:
 
@@ -392,8 +414,10 @@ Yang diuji bukan hanya fungsi murni, tetapi juga hal yang mudah rusak tanpa terl
 - `lib/news.test.ts` — menolak URL non-HTTP, jalur gambar di luar proksi, dan karakter kontrol.
 - `lib/map.test.ts` — membuktikan gratikula dan skala terbentuk, serta titik tidak keluar bidang.
 
-Pengujian end-to-end dan audit aksesibilitas otomatis **belum ada**. Keduanya memerlukan perambatan
-nyata (Playwright) dan database hidup.
+Pengujian end-to-end di tingkat peramban dan audit aksesibilitas otomatis
+**belum ada**. Yang ada adalah e2e lapis HTTP: `demo-flow` mem-boot aplikasi
+sungguhan di atas PostgreSQL sungguhan dan menjalankan alur demo. Peramban nyata
+tetap diperiksa manual.
 
 ---
 
@@ -461,14 +485,20 @@ migrasi baru untuk perubahan berikutnya.
 Ini bukan proyek yang selesai. Yang berikut belum ada, dan disebutkan supaya tidak dikira sudah:
 
 - **Belum ada data lapangan.** Seluruh angka berasal dari seed simulasi dan diberi label.
-- **Estimator masih deskriptif.** `methodVersion` masih sederhana; belum ada Kaplan–Meier atau
-  bootstrap CI penuh.
+- **Estimator belum tervalidasi lapangan.** Metode `km-v1` sudah memakai RMST dan
+  interval bootstrap klaster, tetapi ambang bukti belum diuji pada data nyata.
 - **Peta berupa skema posisi**, bukan peta jalan. Ubin peta ditunda karena melebihi anggaran ukuran
   yang ditetapkan dokumentasi.
 - **Kabar transportasi hanya berskala nasional.** Sumber berita daerah yang sah dan gratis tidak
   tersedia; agregator menolak penggunaan non-pribadi. Antarmuka menyatakan ini apa adanya.
-- **Manajemen anggota instansi belum ada** karena endpoint-nya belum dibuat di API.
-- **Audit aksesibilitas otomatis dan uji end-to-end belum ada.**
+- **Panel lintas instansi hanya berlaku dalam satu kota.** Itu keputusan desain,
+  bukan kelalaian.
+- **Tanda tangan tanggapan opsional.** Tanpa `RESPONSE_SIGNING_KEY`, tanggapan
+  terbit tanpa tanda tangan dan antarmuka menyebutnya apa adanya.
+- **Audit aksesibilitas otomatis belum ada**; e2e yang ada berjalan di lapis
+  HTTP, bukan peramban.
+- **Belum ada data pengamatan nyata.** Papan bukti menampilkan estimasi dari seed
+  berlabel simulasi.
 - **Pembayaran, tarif, dan tiket tidak disentuh sama sekali.**
 
 ---

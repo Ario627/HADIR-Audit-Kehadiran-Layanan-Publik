@@ -1,5 +1,6 @@
 import { apiAssetUrl } from '../../lib/api';
 import { ageLabel, type NewsItem } from '../../lib/news';
+import { NewsImage } from './NewsImage';
 
 export interface NewsRowProps {
   item: NewsItem;
@@ -17,7 +18,7 @@ export function NewsRow({ item, now }: NewsRowProps) {
           </span>
         ) : (
           <span className="news-row-media">
-            <img src={image} alt="" loading="lazy" decoding="async" width="160" height="90" />
+            <NewsImage src={image} width={160} height={90} />
             {item.hasVideo ? (
               <span className="news-row-play" aria-hidden="true">
                 Video

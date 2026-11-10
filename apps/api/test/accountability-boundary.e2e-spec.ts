@@ -157,10 +157,37 @@ describeBoundary('accountability boundary against real PostgreSQL', () => {
       GRANT SELECT, INSERT, UPDATE ON partner_sessions TO hadir_app
     `);
     await pool.query(
-      await readFile(
-        resolve(MIGRATIONS, '0027_accountability.sql'),
-        'utf8',
-      ),
+      await readFile(resolve(MIGRATIONS, '0027_accountability.sql'), 'utf8'),
+    );
+    await pool.query(`
+      CREATE TYPE panel_role AS ENUM ('observer', 'verifier');
+      CREATE TYPE panel_status AS ENUM ('invited', 'active', 'declined', 'revoked');
+      CREATE TABLE report_panel_grants (
+        id uuid PRIMARY KEY DEFAULT uuidv7(),
+        report_id uuid NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+        institution_id uuid NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+        claimant_institution_id uuid NOT NULL REFERENCES institutions(id) ON DELETE RESTRICT,
+        city_id uuid NOT NULL,
+        role panel_role NOT NULL DEFAULT 'verifier',
+        status panel_status NOT NULL DEFAULT 'invited',
+        invited_by uuid,
+        decided_at timestamp with time zone,
+        revoked_at timestamp with time zone,
+        created_at timestamp with time zone NOT NULL DEFAULT now()
+      )
+    `);
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION current_panel_role(p_report_id uuid) RETURNS text
+      LANGUAGE sql STABLE AS $$
+        SELECT g.role::text FROM report_panel_grants g
+        WHERE g.report_id = p_report_id
+          AND g.institution_id = current_institution()
+          AND g.status = 'active'
+        LIMIT 1;
+      $$
+    `);
+    await pool.query(
+      await readFile(resolve(MIGRATIONS, '0030_response_attestation.sql'), 'utf8'),
     );
 
     await pool.query(`INSERT INTO institutions (id, name) VALUES ($1, 'Dishub'), ($2, 'Polrestabes')`, [
@@ -391,6 +418,157 @@ describeBoundary('accountability boundary against real PostgreSQL', () => {
         tx.execute(sql`UPDATE report_responses SET body = repeat('z', 40)`),
       ),
     ).rejects.toThrow(/permission denied|append-only|Failed query/u);
+  });
+
+  it('stores and reads back a signed response attestation', async () => {
+    const reportId = await responseId('LPR-2026-000101');
+    const publishedAt = new Date('2026-10-04T00:00:00.000Z');
+    const digest = Buffer.alloc(32, 3);
+    const signature = Buffer.alloc(64, 4);
+    const publicKey = Buffer.alloc(32, 5);
+
+    const created = await asApp(
+      'partner',
+      { institutionId: DISHUB },
+      async (tx) =>
+        repository.insertResponse(tx, {
+          reportId,
+          institutionId: DISHUB,
+          authorUserId: USER_A,
+          kind: 'initial',
+          body: 'Perbaikan sudah dijadwalkan dan ditandatangani resmi.',
+          evidenceUrls: ['https://dinhub.test/bukti/2.jpg'],
+          correctsResponseId: null,
+          publishedAt,
+          attestation: {
+            bodyDigest: digest,
+            signature,
+            algorithm: 'ed25519',
+            keyId: 'response-key-1',
+            publicKey,
+            signedAt: publishedAt,
+          },
+        }),
+      true,
+    );
+
+    const rows = await asApp('public', {}, async (tx) =>
+      repository.listAttestations(tx, reportId),
+    );
+    const found = rows.find((row) => row.responseId === created);
+    expect(found?.bodyDigestHex).toBe(digest.toString('hex'));
+    expect(found?.signingKeyId).toBe('response-key-1');
+    expect(found?.signatureAlgorithm).toBe('ed25519');
+    expect(found?.publicKeyBase64).toBe(publicKey.toString('base64'));
+  });
+
+  it('refuses any update to a signed response, signature columns included', async () => {
+    const reportId = await responseId('LPR-2026-000101');
+    const rows = await asApp('public', {}, async (tx) =>
+      repository.listAttestations(tx, reportId),
+    );
+    const signed = rows.find((row) => row.signatureBase64 !== null);
+    expect(signed).toBeDefined();
+    await expect(
+      asApp(
+        'partner',
+        { institutionId: DISHUB },
+        async (tx) =>
+          tx.execute(sql`
+            UPDATE report_responses SET signing_key_id = 'other-key' WHERE true
+          `),
+        true,
+      ),
+    ).rejects.toThrow(/permission denied|append-only|Failed query/u);
+  });
+
+  it('accepts a complete signature set at insert time', async () => {
+    const reportId = await responseId('LPR-2026-000101');
+    const created = await asApp(
+      'partner',
+      { institutionId: DISHUB },
+      async (tx) =>
+        repository.insertResponse(tx, {
+          reportId,
+          institutionId: DISHUB,
+          authorUserId: USER_A,
+          kind: 'follow_up',
+          body: 'Tanggapan tanpa kunci publik yang lengkap harus ditolak.',
+          evidenceUrls: [],
+          correctsResponseId: null,
+          publishedAt: new Date('2026-10-04T01:00:00.000Z'),
+          attestation: {
+            bodyDigest: Buffer.alloc(32, 1),
+            signature: Buffer.alloc(64, 1),
+            algorithm: 'ed25519',
+            keyId: 'k',
+            publicKey: Buffer.alloc(32, 2),
+            signedAt: new Date('2026-10-04T01:00:00.000Z'),
+          },
+        }),
+      true,
+    );
+    expect(created).toHaveLength(36);
+  });
+
+  it('rejects a signature of the wrong length at insert time', async () => {
+    const reportId = await responseId('LPR-2026-000101');
+    await expect(
+      asApp(
+        'partner',
+        { institutionId: DISHUB },
+        async (tx) =>
+          repository.insertResponse(tx, {
+            reportId,
+            institutionId: DISHUB,
+            authorUserId: USER_A,
+            kind: 'follow_up',
+            body: 'Tanda tangan pendek harus ditolak oleh basis data juga.',
+            evidenceUrls: [],
+            correctsResponseId: null,
+            publishedAt: new Date('2026-10-04T02:00:00.000Z'),
+            attestation: {
+              bodyDigest: Buffer.alloc(32, 1),
+              signature: Buffer.alloc(16, 1),
+              algorithm: 'ed25519',
+              keyId: 'k',
+              publicKey: Buffer.alloc(32, 2),
+              signedAt: new Date('2026-10-04T02:00:00.000Z'),
+            },
+          }),
+        true,
+      ),
+    ).rejects.toThrow(/ck_response_signature_bytes|Failed query/u);
+  });
+
+  it('rejects a digest of the wrong length at insert time', async () => {
+    const reportId = await responseId('LPR-2026-000101');
+    await expect(
+      asApp(
+        'partner',
+        { institutionId: DISHUB },
+        async (tx) =>
+          repository.insertResponse(tx, {
+            reportId,
+            institutionId: DISHUB,
+            authorUserId: USER_A,
+            kind: 'follow_up',
+            body: 'Digest pendek juga harus ditolak oleh basis data.',
+            evidenceUrls: [],
+            correctsResponseId: null,
+            publishedAt: new Date('2026-10-04T03:00:00.000Z'),
+            attestation: {
+              bodyDigest: Buffer.alloc(31, 1),
+              signature: Buffer.alloc(64, 1),
+              algorithm: 'ed25519',
+              keyId: 'k',
+              publicKey: Buffer.alloc(32, 2),
+              signedAt: new Date('2026-10-04T03:00:00.000Z'),
+            },
+          }),
+        true,
+      ),
+    ).rejects.toThrow(/ck_response_body_digest|Failed query/u);
   });
 
   it('enforces one pending invite per email and institution', async () => {

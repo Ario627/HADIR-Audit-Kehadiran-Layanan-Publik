@@ -28,9 +28,45 @@ export interface NewsPayload {
   fetchedAt: string;
 }
 
-export interface MediaResult {
-  bytes: Buffer;
-  mime: string;
+export type MediaFailure =
+  | 'invalid_token'
+  | 'host_not_allowed'
+  | 'upstream_gone'
+  | 'upstream_unavailable'
+  | 'content_rejected';
+
+export type MediaResult =
+  | { kind: 'ok'; bytes: Buffer; mime: string }
+  | { kind: 'failed'; reason: MediaFailure };
+
+export interface UpstreamVerdict {
+  ok: boolean;
+  retryable: boolean;
+}
+
+export function classifyUpstreamStatus(status: number): UpstreamVerdict {
+  if (status >= 200 && status < 300) {
+    return { ok: true, retryable: false };
+  }
+  if (status >= 500 || status === 408 || status === 425 || status === 429) {
+    return { ok: false, retryable: true };
+  }
+  return { ok: false, retryable: false };
+}
+
+export function classifyContentType(
+  contentType: string | null,
+  declaredBytes: number | null,
+  limitBytes: number,
+): 'accept' | 'reject_mime' | 'reject_size' {
+  const mime = (contentType ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+  if (!NEWS_MEDIA_MIME.includes(mime)) {
+    return 'reject_mime';
+  }
+  if (declaredBytes !== null && Number.isFinite(declaredBytes) && declaredBytes > limitBytes) {
+    return 'reject_size';
+  }
+  return 'accept';
 }
 
 const CACHE_PREFIX = 'hadir:news:v1';
@@ -191,10 +227,13 @@ export class NewsService {
     return pending;
   }
 
-  async media(token: string): Promise<MediaResult | null> {
+  async media(token: string): Promise<MediaResult> {
     const claims = verifyMediaToken(mediaSecret(), token, Date.now());
-    if (claims === null || !isAllowedHost(claims.url)) {
-      return null;
+    if (claims === null) {
+      return { kind: 'failed', reason: 'invalid_token' };
+    }
+    if (!isAllowedHost(claims.url)) {
+      return { kind: 'failed', reason: 'host_not_allowed' };
     }
     const controller = new AbortController();
     const timer = setTimeout(() => {
@@ -206,22 +245,39 @@ export class NewsService {
         redirect: 'error',
         headers: { Accept: 'image/avif,image/webp,image/jpeg,image/png;q=0.9' },
       });
-      if (!response.ok) {
-        return null;
+      const verdict = classifyUpstreamStatus(response.status);
+      if (!verdict.ok) {
+        this.logger.debug(
+          `Media upstream ${String(response.status)} untuk ${claims.url} (retryable=${String(verdict.retryable)}).`,
+        );
+        return {
+          kind: 'failed',
+          reason: verdict.retryable ? 'upstream_unavailable' : 'upstream_gone',
+        };
+      }
+      const declaredRaw = response.headers.get('content-length');
+      const declared = declaredRaw === null ? null : Number(declaredRaw);
+      const content = classifyContentType(
+        response.headers.get('content-type'),
+        declared,
+        NEWS_MEDIA_MAX_BYTES,
+      );
+      if (content !== 'accept') {
+        await response.body?.cancel().catch(() => undefined);
+        return { kind: 'failed', reason: 'content_rejected' };
       }
       const mime =
         (response.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
-      if (!NEWS_MEDIA_MIME.includes(mime)) {
-        return null;
-      }
-      const declared = Number(response.headers.get('content-length') ?? '0');
-      if (Number.isFinite(declared) && declared > NEWS_MEDIA_MAX_BYTES) {
-        return null;
-      }
       const bytes = await readCapped(response, NEWS_MEDIA_MAX_BYTES);
-      return bytes === null ? null : { bytes, mime };
-    } catch {
-      return null;
+      if (bytes === null || bytes.byteLength === 0) {
+        return { kind: 'failed', reason: 'content_rejected' };
+      }
+      return { kind: 'ok', bytes, mime };
+    } catch (error) {
+      this.logger.debug(
+        `Media upstream gagal dijangkau: ${error instanceof Error ? error.message : String(error)}.`,
+      );
+      return { kind: 'failed', reason: 'upstream_unavailable' };
     } finally {
       clearTimeout(timer);
     }

@@ -1,5 +1,6 @@
-import { Controller, Get, Header, NotFoundException, Param, Query, Req, Res } from '@nestjs/common';
+import { Controller, Get, Header, Param, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { AppError } from '../../common/errors/app-error';
 import { ok } from '../../common/http/envelope';
 import { requestIdOf } from '../../common/http/request-context';
 import { RateLimit, RATE_LIMIT_POLICIES } from '../../common/http/rate-limit.policy';
@@ -34,8 +35,19 @@ export class NewsController {
   @RateLimit(RATE_LIMIT_POLICIES.stopsRead)
   async media(@Param('token') token: string, @Res() response: Response): Promise<void> {
     const result = await this.news.media(token);
-    if (result === null) {
-      throw new NotFoundException('Media tidak tersedia.');
+    if (result.kind === 'failed') {
+      if (result.reason === 'upstream_unavailable') {
+        throw new AppError('SERVICE_UNAVAILABLE', {
+          detail: 'Sumber gambar sedang tidak dapat dijangkau. Coba lagi sebentar.',
+          headers: { 'Retry-After': '30' },
+        });
+      }
+      throw new AppError('NOT_FOUND', {
+        detail:
+          result.reason === 'invalid_token' || result.reason === 'host_not_allowed'
+            ? 'Alamat gambar tidak sah.'
+            : 'Gambar tidak tersedia dari sumbernya.',
+      });
     }
     response.setHeader('Content-Type', result.mime);
     response.setHeader('Cache-Control', MEDIA_CACHE);

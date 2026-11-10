@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as InstansiRouteImport } from './routes/instansi'
 import { Route as LaporRouteImport } from './routes/lapor'
 import { Route as MasukRouteImport } from './routes/masuk'
 import { Route as MetodologiRouteImport } from './routes/metodologi'
@@ -37,6 +38,11 @@ import { Route as PartnerLaporanPublicIdRouteImport } from './routes/partner.lap
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InstansiRoute = InstansiRouteImport.update({
+  id: '/instansi',
+  path: '/instansi',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LaporRoute = LaporRouteImport.update({
@@ -157,6 +163,7 @@ const PartnerLaporanPublicIdRoute = PartnerLaporanPublicIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/instansi': typeof InstansiRoute
   '/lapor': typeof LaporRouteWithChildren
   '/masuk': typeof MasukRoute
   '/metodologi': typeof MetodologiRoute
@@ -183,6 +190,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/instansi': typeof InstansiRoute
   '/lapor': typeof LaporRouteWithChildren
   '/masuk': typeof MasukRoute
   '/metodologi': typeof MetodologiRoute
@@ -209,6 +217,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/instansi': typeof InstansiRoute
   '/lapor': typeof LaporRouteWithChildren
   '/masuk': typeof MasukRoute
   '/metodologi': typeof MetodologiRoute
@@ -237,6 +246,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/instansi'
     | '/lapor'
     | '/masuk'
     | '/metodologi'
@@ -263,6 +273,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/instansi'
     | '/lapor'
     | '/masuk'
     | '/metodologi'
@@ -288,6 +299,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/instansi'
     | '/lapor'
     | '/masuk'
     | '/metodologi'
@@ -315,6 +327,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  InstansiRoute: typeof InstansiRoute
   LaporRoute: typeof LaporRouteWithChildren
   MasukRoute: typeof MasukRoute
   MetodologiRoute: typeof MetodologiRoute
@@ -340,6 +353,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/instansi': {
+      id: '/instansi'
+      path: '/instansi'
+      fullPath: '/instansi'
+      preLoaderRoute: typeof InstansiRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/lapor': {
@@ -539,6 +559,7 @@ const PartnerRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  InstansiRoute: InstansiRoute,
   LaporRoute: LaporRouteWithChildren,
   MasukRoute: MasukRoute,
   MetodologiRoute: MetodologiRoute,

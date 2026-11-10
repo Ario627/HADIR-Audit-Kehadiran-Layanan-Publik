@@ -107,6 +107,15 @@ export interface SlaBreachRow {
   resolvedAt: Date | null;
 }
 
+export interface AttestationInsert {
+  bodyDigest: Buffer;
+  signature: Buffer;
+  algorithm: string;
+  keyId: string;
+  publicKey: Buffer;
+  signedAt: Date;
+}
+
 export interface ResponseInsert {
   reportId: string;
   institutionId: string;
@@ -115,7 +124,11 @@ export interface ResponseInsert {
   body: string;
   evidenceUrls: readonly string[];
   correctsResponseId: string | null;
+  publishedAt: Date;
+  attestation: AttestationInsert | null;
 }
+
+
 
 export interface VerificationInsert {
   reportId: string;
@@ -355,11 +368,19 @@ export class AccountabilityRepository {
     const result = await tx.execute(sql`
       INSERT INTO report_responses (
         report_id, institution_id, author_user_id, kind, body,
-        evidence_urls, corrects_response_id
+        evidence_urls, corrects_response_id, published_at,
+        body_digest, signature, signature_algorithm, signing_key_id,
+        public_key, signed_at
       ) VALUES (
         ${input.reportId}, ${input.institutionId}, ${input.authorUserId},
         ${input.kind}::response_kind, ${input.body}, ${urls},
-        ${input.correctsResponseId}
+        ${input.correctsResponseId}, ${input.publishedAt},
+        ${input.attestation?.bodyDigest ?? null},
+        ${input.attestation?.signature ?? null},
+        ${input.attestation?.algorithm ?? null},
+        ${input.attestation?.keyId ?? null},
+        ${input.attestation?.publicKey ?? null},
+        ${input.attestation?.signedAt ?? null}
       )
       RETURNING id
     `);
@@ -389,6 +410,40 @@ export class AccountabilityRepository {
         note: nullableText(record.note),
         mediaId: nullableText(record.media_id),
         createdAt: date(record.created_at),
+      };
+    });
+  }
+
+  async listAttestations(
+    executor: Database | Transaction,
+    reportId: string,
+  ): Promise<
+    {
+      responseId: string;
+      bodyDigestHex: string | null;
+      signatureBase64: string | null;
+      signatureAlgorithm: string | null;
+      signingKeyId: string | null;
+      publicKeyBase64: string | null;
+      signedAt: Date | null;
+    }[]
+  > {
+    const result = await executor.execute(sql`
+      SELECT response_id, body_digest_hex, signature_base64, signature_algorithm,
+             signing_key_id, public_key_base64, signed_at
+      FROM response_attestations
+      WHERE report_id = ${reportId}
+    `);
+    return result.rows.map((row) => {
+      const record = row as Record<string, unknown>;
+      return {
+        responseId: text(record.response_id),
+        bodyDigestHex: nullableText(record.body_digest_hex),
+        signatureBase64: nullableText(record.signature_base64),
+        signatureAlgorithm: nullableText(record.signature_algorithm),
+        signingKeyId: nullableText(record.signing_key_id),
+        publicKeyBase64: nullableText(record.public_key_base64),
+        signedAt: nullableDate(record.signed_at),
       };
     });
   }

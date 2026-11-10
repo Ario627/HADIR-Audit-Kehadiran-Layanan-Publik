@@ -128,6 +128,8 @@ function build(overrides: {
         ? [verificationRow({ verdict: 'refuted', evidenceUrls: [] })]
         : [...(overrides.verifications ?? [])],
     listClosureAnswers: async () => [...(overrides.closures ?? [])],
+    listAttestations: async () => [],
+    attachAttestation: async () => true,
     findSla: async () => (overrides.sla === undefined ? slaRow() : overrides.sla),
     insertResponse: async () => '0192f0c4-0000-7000-8000-0000000000f9',
     insertVerification: async () => '0192f0c4-0000-7000-8000-0000000000fa',
