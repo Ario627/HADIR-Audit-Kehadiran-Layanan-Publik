@@ -5,6 +5,7 @@ import { describeError } from '../../lib/errors';
 import { fetchAppeals, submitAppeal } from '../../lib/governance-api';
 import { uuidv7 } from '../../lib/id';
 import { reportQueryKey } from '../../lib/report-api';
+import { formatDateTime } from '../../lib/time';
 
 const GROUNDS: ReadonlyArray<{ value: AppealGrounds; label: string; hint: string }> = [
   {
@@ -83,6 +84,9 @@ function AppealRow({ appeal }: { appeal: AppealView }) {
         <span className="appeal__status">{appeal.summary}</span>
       </p>
       <p className="appeal__statement">{appeal.statement}</p>
+      <p className={appeal.decisionOverdue ? 'appeal__clock appeal__clock--late' : 'appeal__clock'}>
+        {appeal.decisionLabel} · tenggat {formatDateTime(appeal.decisionDue)}
+      </p>
       {appeal.decisionNote === null ? null : (
         <p className="appeal__decision">Keputusan: {appeal.decisionNote}</p>
       )}

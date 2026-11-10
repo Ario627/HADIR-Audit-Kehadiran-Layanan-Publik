@@ -36,6 +36,7 @@ export interface BenchmarkQuery {
   stopId?: string | null;
   onDate: string;
   dayScope?: CommitmentDayScope | null;
+  holidays?: ReadonlySet<string> | null;
 }
 
 export interface ResolvedBenchmark {
@@ -90,10 +91,16 @@ function parseDay(raw: string): Date | null {
   return parsed.toISOString().slice(0, 10) === raw ? parsed : null;
 }
 
-export function dayScopeForDate(date: string): CommitmentDayScope | null {
+export function dayScopeForDate(
+  date: string,
+  holidays?: ReadonlySet<string> | null,
+): CommitmentDayScope | null {
   const parsed = parseDay(date);
   if (parsed === null) {
     return null;
+  }
+  if (holidays !== undefined && holidays !== null && holidays.has(date)) {
+    return 'holiday';
   }
   const weekday = parsed.getUTCDay();
   return weekday === 0 || weekday === 6 ? 'weekend' : 'weekday';
@@ -196,7 +203,7 @@ export function resolveBenchmark(
   records: readonly CommitmentRecord[],
   query: BenchmarkQuery,
 ): Benchmark {
-  const scope = query.dayScope ?? dayScopeForDate(query.onDate);
+  const scope = query.dayScope ?? dayScopeForDate(query.onDate, query.holidays);
   if (scope === null) {
     return {
       status: 'unavailable',
@@ -290,11 +297,13 @@ export function resolveBenchmarkForStop(
   stopId: string,
   routeId: string | null,
   onDate: string,
+  holidays?: ReadonlySet<string> | null,
 ): Benchmark {
   return resolveBenchmark(records, {
     stopId,
     routeId,
     onDate,
+    ...(holidays === undefined ? {} : { holidays }),
   });
 }
 

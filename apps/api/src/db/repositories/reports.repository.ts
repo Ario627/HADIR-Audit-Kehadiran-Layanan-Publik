@@ -43,6 +43,7 @@ export interface ReportListFilters {
   category: ReportCategory | null;
   status: ReportStatus | null;
   bbox: BboxValue | null;
+  stopId: string | null;
   cursor: { createdAt: Date; id: string } | null;
   limit: number;
 }
@@ -151,6 +152,9 @@ function publicFilters(filters: ReportListFilters): SQL {
   }
   if (filters.status !== null) {
     conditions.push(eq(reports.status, filters.status as StoredReportStatus));
+  }
+  if (filters.stopId !== null) {
+    conditions.push(eq(reports.stopId, filters.stopId));
   }
   if (filters.bbox !== null) {
     conditions.push(
@@ -635,6 +639,29 @@ export class ReportsRepository {
     }
     if (filters.status !== null) {
       conditions.push(eq(reports.status, filters.status as StoredReportStatus));
+    }
+    if (filters.cursor !== null) {
+      conditions.push(
+        sql`(${reports.createdAt}, ${reports.id}) < (${filters.cursor.createdAt}, ${filters.cursor.id})`,
+      );
+    }
+    const rows = await baseQuery(executor)
+      .where(and(...conditions))
+      .orderBy(desc(reports.createdAt), desc(reports.id))
+      .limit(Math.min(filters.limit, MAX_LIST_LIMIT) + 1);
+    const hasMore = rows.length > filters.limit;
+    return { items: hasMore ? rows.slice(0, filters.limit) : rows, hasMore };
+  }
+
+  async listForModeration(
+    executor: Database | Transaction,
+    filters: ReportListFilters & { moderation: string },
+  ): Promise<{ items: ReportRow[]; hasMore: boolean }> {
+    const conditions: SQL[] = [
+      eq(reports.moderation, filters.moderation as ReportRow['moderation']),
+    ];
+    if (filters.category !== null) {
+      conditions.push(eq(reports.category, filters.category as StoredReportCategory));
     }
     if (filters.cursor !== null) {
       conditions.push(

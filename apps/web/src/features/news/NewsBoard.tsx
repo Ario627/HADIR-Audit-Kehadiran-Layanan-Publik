@@ -20,7 +20,6 @@ export function NewsBoard() {
   const lead = leadItem(items);
   const rest = restItems(items, lead);
   const regionLabel = feed.data?.region.label ?? 'Banyumas';
-  const hasLocal = items.some((item) => item.scope === 'daerah');
   const now = Date.now();
   const failed = feed.isError;
 
@@ -44,12 +43,7 @@ export function NewsBoard() {
         />
       </div>
 
-      {hasLocal || items.length === 0 || region === 'nasional' ? null : (
-        <p className="news-note" role="status">
-          Belum ada kabar {regionLabel} pada sumber hari ini. Semua yang tampil berskala nasional —
-          cakupan tetap ditampilkan supaya kamu tidak mengira ini berita daerah.
-        </p>
-      )}
+      
 
       {failed ? (
         <p className="news-note" role="status">
@@ -64,9 +58,7 @@ export function NewsBoard() {
         </div>
       ) : lead === null ? (
         <p className="news-note" role="status">
-          Belum ada kabar transportasi untuk cakupan {regionLabel} hari ini. Sumber hanya menyediakan
-          berita nasional, jadi cakupan daerah sering kosong — itu keterbatasan sumber, bukan
-          kesalahan muat.
+          Belum ada kabar transportasi untuk cakupan {regionLabel} hari ini.
         </p>
       ) : (
         <div className="news-grid" data-count={items.length <= 2 ? 'few' : 'many'}>

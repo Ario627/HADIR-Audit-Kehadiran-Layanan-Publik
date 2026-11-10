@@ -28,7 +28,7 @@ export interface ProblemDetails {
   errors?: ApiFieldError[];
 }
 
-export type ApiMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+export type ApiMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
 export interface ApiRequestOptions {
   method?: ApiMethod;

@@ -276,6 +276,8 @@ export const EvidencePack = z.object({
   stopCode: z.string().min(1).max(12),
   stopName: z.string().min(1).max(160),
   generatedAt: IsoDateTime,
+  dayScope: CommitmentDayScope,
+  holidayName: z.string().min(1).max(120).nullable(),
   benchmark: Benchmark,
   quality: QualityBreakdownView,
   representativeness: RepresentativenessView,
@@ -295,6 +297,26 @@ export const EvidenceQuery = z
   .strict();
 
 export type EvidenceQuery = z.infer<typeof EvidenceQuery>;
+
+export const HolidayView = z.object({
+  date: AnchorDate,
+  name: z.string().min(1).max(120),
+  scope: z.enum(['national', 'city']),
+  cityId: Uuid.nullable(),
+  sourceUrl: z.string().min(8).max(500),
+});
+
+export type HolidayView = z.infer<typeof HolidayView>;
+
+export const HolidayQuery = z
+  .object({
+    from: AnchorDate.optional(),
+    to: AnchorDate.optional(),
+    cityId: Uuid.optional(),
+  })
+  .strict();
+
+export type HolidayQuery = z.infer<typeof HolidayQuery>;
 
 export const CommitmentCreate = z
   .object({

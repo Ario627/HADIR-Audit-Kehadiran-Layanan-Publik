@@ -5,6 +5,7 @@ import {
   CommitmentQuery,
   ContextQuery,
   EvidenceQuery,
+  HolidayQuery,
   Uuid,
 } from '@hadir/contracts';
 import { z } from 'zod';
@@ -39,6 +40,15 @@ export class EvidenceController {
   async history(@Query() query: unknown, @Req() request: Request) {
     const input = parseOrThrow(CommitmentHistoryQuery, query);
     const items = await this.evidence.commitmentHistory(input);
+    return ok({ items, count: items.length }, requestIdOf(request));
+  }
+
+  @Get('holidays')
+  @Header('Cache-Control', PUBLIC_CACHE)
+  @RateLimit(RATE_LIMIT_POLICIES.stopsRead)
+  async holidays(@Query() query: unknown, @Req() request: Request) {
+    const input = parseOrThrow(HolidayQuery, query);
+    const items = await this.evidence.holidays(input);
     return ok({ items, count: items.length }, requestIdOf(request));
   }
 

@@ -153,20 +153,38 @@ describe('public id', () => {
   });
 
   it('menolak id pendek, terlalu panjang, atau berisi simbol', () => {
+    expect(readPublicId('LPR-2026-007919')).toBe('LPR-2026-007919');
     expect(readPublicId('12345')).toBeNull();
     expect(readPublicId('a'.repeat(41))).toBeNull();
-    expect(readPublicId('12-345')).toBeNull();
+    expect(readPublicId('-12345')).toBeNull();
+    expect(readPublicId('12-345')).toBe('12-345');
     expect(readPublicId('../../etc')).toBeNull();
+    expect(readPublicId('LPR 2026 007')).toBeNull();
     expect(readPublicId(null)).toBeNull();
   });
 });
 
 describe('laporan milik sendiri', () => {
   it('tidak melempar saat penyimpanan tidak tersedia', () => {
-    expect(() => {
-      rememberOwnReport('123456');
-    }).not.toThrow();
-    expect(isOwnReport('123456')).toBe(false);
+    const descriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new Error('penyimpanan ditolak');
+      },
+    });
+    try {
+      expect(() => {
+        rememberOwnReport('123456');
+      }).not.toThrow();
+      expect(isOwnReport('123456')).toBe(false);
+    } finally {
+      if (descriptor === undefined) {
+        Reflect.deleteProperty(window, 'localStorage');
+      } else {
+        Object.defineProperty(window, 'localStorage', descriptor);
+      }
+    }
   });
 
   it('mengabaikan id yang tidak valid', () => {

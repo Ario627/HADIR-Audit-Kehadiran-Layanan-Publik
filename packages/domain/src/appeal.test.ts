@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  APPEAL_DECISION_DAYS,
+  APPEAL_DEVICE_MONTHLY_LIMIT,
   APPEAL_WINDOWS,
   appealAdmissibility,
   appealBurdenOfProof,
   appealCaveats,
+  appealDecisionClock,
+  appealDecisionDue,
   appealGroundsLabel,
   appealOutcomeEffect,
   appealWindow,
@@ -72,6 +76,44 @@ describe('appealWindow', () => {
   });
 });
 
+describe('appealDecisionClock', () => {
+  it('counts the decision deadline from the submission moment', () => {
+    expect(APPEAL_DECISION_DAYS).toBe(14);
+    expect(appealDecisionDue('2026-10-01T00:00:00.000Z')).toBe(
+      '2026-10-15T00:00:00.000Z',
+    );
+    expect(appealDecisionDue('kemarin')).toBeNull();
+  });
+
+  it('reports remaining and overdue hours without inventing a decision', () => {
+    const pending = appealDecisionClock('2026-10-01T00:00:00.000Z', '2026-10-10T00:00:00.000Z');
+    expect(pending?.overdue).toBe(false);
+    expect(pending?.remainingHours).toBe(120);
+    expect(pending?.label).toBe('Sisa 120 jam');
+
+    const late = appealDecisionClock('2026-10-01T00:00:00.000Z', '2026-10-17T06:00:00.000Z');
+    expect(late?.overdue).toBe(true);
+    expect(late?.label).toBe('Lewat 54 jam dari tenggat');
+  });
+
+  it('describes a settled appeal against the same deadline', () => {
+    const onTime = appealDecisionClock(
+      '2026-10-01T00:00:00.000Z',
+      '2026-10-20T00:00:00.000Z',
+      '2026-10-12T00:00:00.000Z',
+    );
+    expect(onTime?.label).toBe('Diputuskan dalam tenggat');
+    expect(onTime?.overdue).toBe(false);
+
+    const late = appealDecisionClock(
+      '2026-10-01T00:00:00.000Z',
+      '2026-10-20T00:00:00.000Z',
+      '2026-10-18T00:00:00.000Z',
+    );
+    expect(late?.label).toBe('Diputuskan melewati tenggat');
+  });
+});
+
 describe('appealAdmissibility', () => {
   it('accepts a fresh appeal inside the window', () => {
     const result = appealAdmissibility(request());
@@ -84,6 +126,19 @@ describe('appealAdmissibility', () => {
     expect(result.admissible).toBe(false);
     expect(result.refusal).toBe('not_decided');
     expect(result.message).toContain('acknowledged');
+  });
+
+  it('refuses a device that already spent its monthly quota', () => {
+    expect(APPEAL_DEVICE_MONTHLY_LIMIT).toBe(5);
+    const result = appealAdmissibility(request({ deviceAppealsLastMonth: 5 }));
+    expect(result.admissible).toBe(false);
+    expect(result.refusal).toBe('device_quota');
+    expect(result.message).toContain('5 banding');
+  });
+
+  it('still allows a device below the monthly quota', () => {
+    const result = appealAdmissibility(request({ deviceAppealsLastMonth: 4 }));
+    expect(result.admissible).toBe(true);
   });
 
   it('accepts an appeal on a disputed case', () => {

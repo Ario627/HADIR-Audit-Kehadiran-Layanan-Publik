@@ -354,6 +354,68 @@ export class AccountabilityRepository {
     return result.rows.map((row) => toResponse(row as Record<string, unknown>));
   }
 
+  async findResponseAttestation(
+    executor: Database | Transaction,
+    publicId: string,
+    responseId: string,
+  ): Promise<{
+    responseId: string;
+    reportPublicId: string;
+    institutionId: string;
+    kind: string;
+    bodyDigestHex: string | null;
+    evidenceUrls: string[];
+    publishedAt: Date;
+    correctsResponseId: string | null;
+    signatureBase64: string | null;
+    signatureAlgorithm: string | null;
+    signingKeyId: string | null;
+    publicKeyBase64: string | null;
+    signedAt: Date | null;
+  } | null> {
+    const result = await executor.execute(sql`
+      SELECT
+        rp.id AS response_id,
+        r.public_id AS report_public_id,
+        rp.institution_id,
+        rp.kind::text AS kind,
+        encode(rp.body_digest, 'hex') AS body_digest_hex,
+        rp.evidence_urls,
+        rp.published_at,
+        rp.corrects_response_id,
+        encode(rp.signature, 'base64') AS signature_base64,
+        rp.signature_algorithm,
+        rp.signing_key_id,
+        encode(rp.public_key, 'base64') AS public_key_base64,
+        rp.signed_at
+      FROM report_responses rp
+      JOIN reports r ON r.id = rp.report_id
+      WHERE r.public_id = ${publicId} AND rp.id = ${responseId}
+      LIMIT 1
+    `);
+    const row = result.rows[0] as Record<string, unknown> | undefined;
+    if (row === undefined) {
+      return null;
+    }
+    return {
+      responseId: text(row.response_id),
+      reportPublicId: text(row.report_public_id),
+      institutionId: text(row.institution_id),
+      kind: text(row.kind),
+      bodyDigestHex: nullableText(row.body_digest_hex),
+      evidenceUrls: Array.isArray(row.evidence_urls)
+        ? row.evidence_urls.filter((url): url is string => typeof url === 'string')
+        : [],
+      publishedAt: new Date(text(row.published_at)),
+      correctsResponseId: nullableText(row.corrects_response_id),
+      signatureBase64: nullableText(row.signature_base64),
+      signatureAlgorithm: nullableText(row.signature_algorithm),
+      signingKeyId: nullableText(row.signing_key_id),
+      publicKeyBase64: nullableText(row.public_key_base64),
+      signedAt: nullableDate(row.signed_at),
+    };
+  }
+
   async insertResponse(
     tx: Transaction,
     input: ResponseInsert,

@@ -37,8 +37,8 @@ function RootLayout() {
       )}
       {online && pending > 0 ? (
         <p className="outbox-bar" role="status">
-          {pending} catatan menunggu terkirim. HADIR mencoba ulang otomatis, dan tiap catatan
-          memakai kunci idempotensi supaya tidak menjadi ganda.
+          {pending} catatan menunggu terkirim.
+          <Link to="/sinkron">Buka antrean</Link>
         </p>
       ) : null}
       <Masthead />
@@ -50,6 +50,8 @@ function RootLayout() {
         <p>HADIR · bukti tunggu bus bersubsidi</p>
         <p>
           <Link to="/metodologi">Cara angka ini dihitung</Link>
+          {' · '}
+          <Link to="/komitmen">Janji layanan</Link>
           {' · '}
           <Link to="/transparansi">Anchor harian</Link>
           {' · '}

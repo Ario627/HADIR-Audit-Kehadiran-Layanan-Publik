@@ -20,7 +20,7 @@ export interface PanelCandidate {
 }
 
 export interface PanelContext {
-  claimantInstitutionId: string;
+  claimantInstitutionId: string | null;
   claimantCityId: string | null;
   candidate: PanelCandidate;
 }
@@ -158,7 +158,7 @@ export function panelStrength(activeVerifiers: number, distinctKinds: number): '
 }
 
 export function eligiblePanelCandidates(
-  claimantInstitutionId: string,
+  claimantInstitutionId: string | null,
   claimantCityId: string | null,
   candidates: readonly PanelCandidate[],
 ): readonly PanelCandidate[] {

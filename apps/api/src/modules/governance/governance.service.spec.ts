@@ -77,6 +77,7 @@ function appeal(overrides: Partial<AppealRow> = {}): AppealRow {
     createdAt: new Date('2026-10-05T00:00:00.000Z'),
     reportStatus: 'claimed_resolved',
     deviceHash: DEVICE,
+    decisionDue: new Date('2026-10-19T00:00:00.000Z'),
     ...overrides,
   };
 }
@@ -104,6 +105,7 @@ function build(
     candidates?: readonly PanelCandidateRow[];
     appeals?: readonly AppealRow[];
     appealCounts?: { total: number; byGrounds: Record<string, number> };
+  deviceAppeals?: number;
     insertedAppealId?: string | null;
     activeVerifier?: boolean;
     institution?: { id: string; name: string; cityId: string | null; cityName: string | null } | null;
@@ -143,6 +145,7 @@ function build(
     listAppealsForDevice: async () => [...(overrides.appeals ?? [])],
     listAppealQueue: async () => [...(overrides.appeals ?? [])],
     countAppealsForReport: async () => overrides.appealCounts ?? { total: 0, byGrounds: {} },
+    countDeviceAppealsSince: async () => overrides.deviceAppeals ?? 0,
     insertAppeal: async () => (overrides.insertedAppealId === undefined ? '0192f0c4-0000-7000-8000-0000000000f1' : overrides.insertedAppealId),
     findAppeal: async () => (overrides.appeals ?? [appeal()])[0] ?? null,
     decideAppeal: async () => true,
@@ -441,6 +444,33 @@ describe('GovernanceService.submitAppeal', () => {
     ).rejects.toThrow(/setelah keputusan/u);
   });
 
+  it('refuses an appeal when the device already spent its monthly quota', async () => {
+    const { service } = build({
+      deviceAppeals: 5,
+      report: {
+        id: REPORT_ID,
+        publicId: PUBLIC_ID,
+        status: 'verified_resolved',
+        cityId: CITY,
+        institutionId: DISHUB,
+        deviceHash: DEVICE,
+        moderation: 'approved',
+        createdAt: new Date('2026-10-01T00:00:00.000Z'),
+      },
+    });
+    await expect(
+      service.submitAppeal(
+        PUBLIC_ID,
+        {
+          grounds: 'resolution',
+          statement: 'Masalah masih terjadi setelah diklaim selesai.',
+          evidenceUrls: [],
+        },
+        device,
+      ),
+    ).rejects.toThrow(/5 banding/u);
+  });
+
   it('refuses a duplicate ground', async () => {
     const { service } = build({ insertedAppealId: null });
     await expect(
@@ -476,6 +506,9 @@ describe('GovernanceService.submitAppeal', () => {
       device,
     );
     expect(view.grounds).toBe('resolution');
+    expect(view.decisionDue).toBe('2026-10-19T00:00:00.000Z');
+    expect(view.decisionOverdue).toBe(true);
+    expect(view.decisionLabel).toContain('Lewat');
     expect(doubles.appended.map((entry) => entry.kind)).toEqual(['disputed']);
     expect(doubles.auditRecorder.records.map((entry) => entry.action)).toContain(
       'report.appeal_submitted',

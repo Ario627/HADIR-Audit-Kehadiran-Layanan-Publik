@@ -6,10 +6,12 @@ import {
   abilitiesFor,
   actionIssueText,
   actionSpec,
+  agePressureText,
   buildActionInput,
   bucketCountText,
   followUpText,
   hasPasswordIssue,
+  reportAgeText,
   hoursText,
   isInboxStatus,
   isOpenStatus,
@@ -477,5 +479,26 @@ describe('readPasswordIssues', () => {
     expect(issues.current).not.toBeNull();
     expect(issues.next).not.toBeNull();
     expect(issues.confirm).not.toBeNull();
+  });
+});
+
+describe('report age', () => {
+  const now = Date.parse('2026-06-10T12:00:00.000Z');
+
+  it('reads the age of a report in the coarsest useful unit', () => {
+    expect(reportAgeText('2026-06-10T11:58:00.000Z', now)).toBe('2 menit');
+    expect(reportAgeText('2026-06-10T11:59:30.000Z', now)).toBe('1 menit');
+    expect(reportAgeText('2026-06-10T07:00:00.000Z', now)).toBe('5 jam');
+    expect(reportAgeText('2026-06-09T12:00:00.000Z', now)).toBe('1 hari');
+    expect(reportAgeText('2026-06-01T12:00:00.000Z', now)).toBe('9 hari');
+    expect(reportAgeText('2026-06-10T12:05:00.000Z', now)).toBe('Baru saja masuk');
+    expect(reportAgeText('bukan tanggal', now)).toBeNull();
+  });
+
+  it('only raises pressure after the first day', () => {
+    expect(agePressureText('2026-06-10T11:00:00.000Z', now)).toBeNull();
+    expect(agePressureText('2026-06-09T09:00:00.000Z', now)).toBe('Sudah lebih dari sehari.');
+    expect(agePressureText('2026-06-07T09:00:00.000Z', now)).toBe('Lewat tiga hari tanpa tindakan.');
+    expect(agePressureText('rusak', now)).toBeNull();
   });
 });

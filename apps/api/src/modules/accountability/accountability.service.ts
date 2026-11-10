@@ -2,6 +2,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   ATTESTATION_ALGORITHM,
   attestationCaveats,
+  attestationIsSigned,
+  attestationPayloadFrom,
   canonicalResponsePayload,
   decideResolution,
   describeSlaPhase,
@@ -30,6 +32,7 @@ import type {
   CaseFile,
   ReportResponse,
   ResponseAttestation as ResponseAttestationView,
+  ResponseAttestationDocument,
   ResolutionVerifyInput,
   ResolutionVerifyResult,
   ResponseCreate,
@@ -352,7 +355,66 @@ export class AccountabilityService {
     };
   }
 
-  async caseFile(publicId: string): Promise<CaseFile> {
+  async responseAttestation(
+    publicId: string,
+    responseId: string,
+  ): Promise<ResponseAttestationDocument> {
+    const row = await this.run(
+      async (tx) => this.repository.findResponseAttestation(tx, publicId, responseId),
+      { scope: 'public', requestId: 'attestation-public' },
+    );
+    if (row === null) {
+      throw new AppError('NOT_FOUND', { detail: 'Tanggapan tidak ditemukan.' });
+    }
+    const envelope: AttestationEnvelope = {
+      reportPublicId: row.reportPublicId,
+      institutionId: row.institutionId,
+      kind: row.kind,
+      bodyDigestHex: row.bodyDigestHex ?? '',
+      evidenceUrls: row.evidenceUrls,
+      publishedAt: row.publishedAt.toISOString(),
+      correctsResponseId: row.correctsResponseId,
+      signatureBase64: row.signatureBase64,
+      signatureAlgorithm: row.signatureAlgorithm,
+      signingKeyId: row.signingKeyId,
+      publicKeyBase64: row.publicKeyBase64,
+      signedAt: row.signedAt === null ? null : row.signedAt.toISOString(),
+    };
+    const verification =
+      row.bodyDigestHex === null
+        ? {
+            status: 'unsigned' as const,
+            message: 'Tanggapan ini tidak membawa sidik isi, jadi tidak dapat diverifikasi.',
+          }
+        : verifyResponseAttestation(envelope, (payload, signature, key) =>
+            verifyResponseSignature({
+              payload,
+              publicKeyBase64: key,
+              signatureBase64: signature,
+            }),
+          );
+    return {
+      responseId: row.responseId,
+      reportPublicId: row.reportPublicId,
+      institutionId: row.institutionId,
+      kind: row.kind as ResponseAttestationDocument['kind'],
+      bodyDigestHex: row.bodyDigestHex,
+      evidenceUrls: row.evidenceUrls,
+      publishedAt: row.publishedAt.toISOString(),
+      correctsResponseId: row.correctsResponseId,
+      canonicalPayload: attestationPayloadFrom(envelope),
+      signatureBase64: row.signatureBase64,
+      signatureAlgorithm: row.signatureAlgorithm,
+      signingKeyId: row.signingKeyId,
+      publicKeyBase64: row.publicKeyBase64,
+      keyFingerprint: signingKeyFingerprint(row.publicKeyBase64),
+      signedAt: envelope.signedAt,
+      signed: attestationIsSigned(envelope),
+      verification: { status: verification.status, message: verification.message },
+    };
+  }
+
+  async caseFile(publicId: string, deviceHash?: string): Promise<CaseFile> {
     const now = new Date().toISOString();
     const loaded = await this.run(
       async (tx) => {
@@ -371,10 +433,15 @@ export class AccountabilityService {
           ]);
         return { caseRow, events, responses, verifications, closures, attestations, sla };
       },
-      { scope: 'public', requestId: 'accountability-public' },
+      deviceHash === undefined
+        ? { scope: 'public', requestId: 'accountability-public' }
+        : { scope: 'citizen', deviceHash, requestId: `case-own-${deviceHash.slice(0, 8)}` },
     );
     if (loaded === null) {
-      throw new AppError('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
+      if (deviceHash === undefined) {
+        throw new AppError('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
+      }
+      return this.caseFile(publicId);
     }
     const attestations = new Map(
       loaded.attestations.map((entry) => [entry.responseId, entry]),

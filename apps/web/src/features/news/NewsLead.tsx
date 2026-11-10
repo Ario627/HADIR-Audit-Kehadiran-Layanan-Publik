@@ -1,6 +1,5 @@
 import { apiAssetUrl } from '../../lib/api';
 import { ageLabel, scopeLabel, type NewsItem } from '../../lib/news';
-import { NewsImage } from './NewsImage';
 
 export interface NewsLeadProps {
   item: NewsItem;

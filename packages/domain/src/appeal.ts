@@ -24,6 +24,17 @@ export interface AppealRequest {
   submittedAt: string;
   now: string;
   priorAppeals: number;
+  deviceAppealsLastMonth?: number;
+}
+
+export const APPEAL_DEVICE_MONTHLY_LIMIT = 5;
+export const APPEAL_DECISION_DAYS = 14;
+
+export interface AppealDecisionClock {
+  dueAt: string;
+  remainingHours: number;
+  overdue: boolean;
+  label: string;
 }
 
 export interface AppealAdmissibility {
@@ -111,6 +122,13 @@ export function appealAdmissibility(request: AppealRequest): AppealAdmissibility
       message: `Banding hanya dapat diajukan setelah keputusan. Status sekarang: ${request.reportStatus}.`,
     };
   }
+  if ((request.deviceAppealsLastMonth ?? 0) >= APPEAL_DEVICE_MONTHLY_LIMIT) {
+    return {
+      admissible: false,
+      refusal: 'device_quota',
+      message: `Batas ${String(APPEAL_DEVICE_MONTHLY_LIMIT)} banding per perangkat dalam 30 hari sudah tercapai.`,
+    };
+  }
   if (request.priorAppeals >= 2) {
     return {
       admissible: false,
@@ -134,6 +152,53 @@ export function appealAdmissibility(request: AppealRequest): AppealAdmissibility
     };
   }
   return { admissible: true, refusal: null, message: 'Banding dapat diterima untuk ditinjau.' };
+}
+
+export function appealDecisionDue(submittedAt: string): string | null {
+  const start = Date.parse(submittedAt);
+  if (Number.isNaN(start)) {
+    return null;
+  }
+  return new Date(start + APPEAL_DECISION_DAYS * DAY_MS).toISOString();
+}
+
+export function appealDecisionClock(
+  submittedAt: string,
+  now: string,
+  decidedAt?: string | null,
+): AppealDecisionClock | null {
+  const due = appealDecisionDue(submittedAt);
+  const reference = Date.parse(now);
+  if (due === null || Number.isNaN(reference)) {
+    return null;
+  }
+  const dueMs = Date.parse(due);
+  const settled = decidedAt !== undefined && decidedAt !== null;
+  const decidedMs = settled ? Date.parse(decidedAt as string) : Number.NaN;
+  const overdue = !settled && reference > dueMs;
+  const remainingHours = Math.max(0, Math.round((dueMs - reference) / 3_600_000));
+  if (settled) {
+    const onTime = Number.isNaN(decidedMs) ? null : decidedMs <= dueMs;
+    return {
+      dueAt: due,
+      remainingHours: 0,
+      overdue: false,
+      label:
+        onTime === null
+          ? 'Sudah diputuskan'
+          : onTime
+            ? 'Diputuskan dalam tenggat'
+            : 'Diputuskan melewati tenggat',
+    };
+  }
+  return {
+    dueAt: due,
+    remainingHours,
+    overdue,
+    label: overdue
+      ? `Lewat ${String(Math.max(1, Math.round((reference - dueMs) / 3_600_000)))} jam dari tenggat`
+      : `Sisa ${String(remainingHours)} jam`,
+  };
 }
 
 export function appealOutcomeEffect(

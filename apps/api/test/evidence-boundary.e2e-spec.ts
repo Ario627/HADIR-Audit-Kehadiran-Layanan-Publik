@@ -16,6 +16,8 @@ const DISHUB = '0192f0c4-0000-7000-8000-0000000000a1';
 const STOP = '0192f0c4-0000-7000-8000-0000000000c1';
 const ROUTE = '0192f0c4-0000-7000-8000-0000000000e1';
 const ADMIN_ID = '0192f0c4-0000-7000-8000-0000000000d1';
+const CITY = '0192f0c4-0000-7000-8000-0000000000f1';
+const OTHER_CITY = '0192f0c4-0000-7000-8000-0000000000f2';
 
 const describeBoundary = DATABASE_URL === undefined ? describe.skip : describe;
 
@@ -389,6 +391,63 @@ describeBoundary('commitment and provenance boundary against real PostgreSQL', (
         true,
       ),
     ).rejects.toThrow();
+  });
+
+  it('reads the holiday calendar and resolves the holiday scope', async () => {
+    await pool.query('TRUNCATE holiday_calendar');
+    await pool.query(
+      `INSERT INTO holiday_calendar (city_id, holiday_date, name, source_url)
+       VALUES (NULL, '2026-12-25'::date, 'Hari Raya', 'https://dinhub.test/libur')`,
+    );
+
+    const national = await asApp('public', async (tx) =>
+      repository.listHolidays(tx, { from: '2026-12-01', to: '2026-12-31', cityId: null }),
+    );
+    expect(national).toHaveLength(1);
+    expect(national[0]?.date).toBe('2026-12-25');
+    expect(national[0]?.cityId).toBeNull();
+
+    const otherMonth = await asApp('public', async (tx) =>
+      repository.listHolidays(tx, { from: '2026-11-01', to: '2026-11-30', cityId: null }),
+    );
+    expect(otherMonth).toEqual([]);
+  });
+
+  it('keeps a city holiday out of another city calendar', async () => {
+    await pool.query('TRUNCATE holiday_calendar');
+    await pool.query(
+      `INSERT INTO cities (id, code, name) VALUES ($1, 'SMG', 'Semarang'), ($2, 'JKT', 'Jakarta')
+       ON CONFLICT DO NOTHING`,
+      [CITY, OTHER_CITY],
+    );
+    await pool.query(
+      `UPDATE stops SET city_id = $1 WHERE id = $2`,
+      [CITY, STOP],
+    );
+    await pool.query(
+      `INSERT INTO holiday_calendar (city_id, holiday_date, name, source_url)
+       VALUES ($1, '2026-12-24'::date, 'Cuti bersama kota', 'https://dinhub.test/cuti')`,
+      [CITY],
+    );
+
+    const sameCity = await asApp('public', async (tx) =>
+      repository.listHolidays(tx, { from: '2026-12-01', to: '2026-12-31', cityId: CITY }),
+    );
+    expect(sameCity.map((row) => row.date)).toEqual(['2026-12-24']);
+
+    const otherCity = await asApp('public', async (tx) =>
+      repository.listHolidays(tx, {
+        from: '2026-12-01',
+        to: '2026-12-31',
+        cityId: OTHER_CITY,
+      }),
+    );
+    expect(otherCity).toEqual([]);
+
+    const stopCity = await asApp('public', async (tx) =>
+      repository.findStopCityId(tx, STOP),
+    );
+    expect(stopCity).toBe(CITY);
   });
 
   it('creates a notice through the repository and keeps it non public when asked', async () => {

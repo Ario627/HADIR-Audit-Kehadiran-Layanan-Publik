@@ -16,7 +16,9 @@ import type { Request } from 'express';
 import {
   AdminAuditQuery,
   AdminChainVerifyInput,
+  AdminReportQueueQuery,
   AdminFlagInput,
+  AdminHolidayInput,
   AdminModerationInput,
   AdminNoticeInput,
   AdminNoticeQuery,
@@ -57,6 +59,21 @@ export class AdminController {
     return ok(created, requestIdOf(request));
   }
 
+  @Post('holidays')
+  @HttpCode(HttpStatus.CREATED)
+  @Header('Cache-Control', NO_STORE)
+  @RateLimit(RATE_LIMIT_POLICIES.adminMutation)
+  @PlatformOnly('moderator')
+  async saveHoliday(@Body() body: unknown, @Req() request: Request) {
+    const input = parseOrThrow(AdminHolidayInput, body);
+    const saved = await this.admin.upsertHoliday(
+      input,
+      platformSessionOf(request),
+      requestIdOf(request),
+    );
+    return ok(saved, requestIdOf(request));
+  }
+
   @Get('notices')
   @Header('Cache-Control', NO_STORE)
   @RateLimit(RATE_LIMIT_POLICIES.adminRead)
@@ -74,6 +91,34 @@ export class AdminController {
   async audit(@Query() query: unknown, @Req() request: Request) {
     const input = parseOrThrow(AdminAuditQuery, query);
     const result = await this.admin.listAudit(input);
+    return ok(result, requestIdOf(request));
+  }
+
+  @Get('reports')
+  @Header('Cache-Control', NO_STORE)
+  @RateLimit(RATE_LIMIT_POLICIES.adminRead)
+  @PlatformOnly('moderator')
+  async moderationQueue(@Query() query: unknown, @Req() request: Request) {
+    const input = parseOrThrow(AdminReportQueueQuery, query);
+    const result = await this.admin.moderationQueue(input);
+    return ok(result, requestIdOf(request));
+  }
+
+  @Get('reports/:publicId')
+  @Header('Cache-Control', NO_STORE)
+  @RateLimit(RATE_LIMIT_POLICIES.adminRead)
+  @PlatformOnly('moderator')
+  async reportDetail(@Param('publicId') publicId: string, @Req() request: Request) {
+    const result = await this.admin.reportDetail(publicId);
+    return ok(result, requestIdOf(request));
+  }
+
+  @Get('cities')
+  @Header('Cache-Control', NO_STORE)
+  @RateLimit(RATE_LIMIT_POLICIES.adminRead)
+  @PlatformOnly('moderator')
+  async cities(@Req() request: Request) {
+    const result = await this.admin.cities();
     return ok(result, requestIdOf(request));
   }
 

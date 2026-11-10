@@ -318,6 +318,41 @@ export function followUpText(followUpAt: string | null, now: number): string | n
   return `Jadwal ${days} hari lagi`;
 }
 
+export function reportAgeText(createdAt: string, now: number): string | null {
+  const at = Date.parse(createdAt);
+  if (Number.isNaN(at)) {
+    return null;
+  }
+  const minutes = Math.floor((now - at) / 60_000);
+  if (minutes < 0) {
+    return 'Baru saja masuk';
+  }
+  if (minutes < 60) {
+    return `${Math.max(1, minutes)} menit`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours} jam`;
+  }
+  const days = Math.floor(hours / 24);
+  return days === 1 ? '1 hari' : `${days} hari`;
+}
+
+export function agePressureText(createdAt: string, now: number): string | null {
+  const at = Date.parse(createdAt);
+  if (Number.isNaN(at)) {
+    return null;
+  }
+  const hours = Math.floor((now - at) / 3_600_000);
+  if (hours >= 72) {
+    return 'Lewat tiga hari tanpa tindakan.';
+  }
+  if (hours >= 24) {
+    return 'Sudah lebih dari sehari.';
+  }
+  return null;
+}
+
 export function ratioText(value: number | null): string {
   if (value === null || !Number.isFinite(value)) {
     return 'belum ada data';

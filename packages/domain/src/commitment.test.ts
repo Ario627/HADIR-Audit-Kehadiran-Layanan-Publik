@@ -48,6 +48,13 @@ describe('dayScopeForDate', () => {
     expect(dayScopeForDate('12-10-2026')).toBeNull();
     expect(dayScopeForDate('2026-13-01')).toBeNull();
   });
+
+  it('uses the calendar when a date is declared a holiday', () => {
+    const calendar = new Set(['2026-10-17']);
+    expect(dayScopeForDate('2026-10-17', calendar)).toBe('holiday');
+    expect(dayScopeForDate('2026-10-18', calendar)).toBe('weekend');
+    expect(dayScopeForDate('2026-10-17', new Set())).toBe('weekend');
+  });
 });
 
 describe('resolveBenchmark', () => {
@@ -215,6 +222,32 @@ describe('resolveBenchmark', () => {
       dayScope: 'holiday',
     });
     expect(withCalendar.status).toBe('resolved');
+  });
+
+  it('infers the holiday scope from a supplied calendar', () => {
+    const holiday = record({ dayScope: 'holiday', headwayMin: 20 });
+    const calendar = new Set(['2026-12-25']);
+
+    const resolved = resolveBenchmark([holiday], {
+      routeId: ROUTE,
+      onDate: '2026-12-25',
+      holidays: calendar,
+    });
+    expect(resolved.status).toBe('resolved');
+
+    const outside = resolveBenchmark([holiday], {
+      routeId: ROUTE,
+      onDate: '2026-12-24',
+      holidays: calendar,
+    });
+    expect(outside.status).toBe('unavailable');
+  });
+
+  it('labels the date scope for ordinary and holiday dates', () => {
+    expect(dayScopeForDate('2026-10-12')).toBe('weekday');
+    expect(dayScopeForDate('2026-10-10')).toBe('weekend');
+    expect(dayScopeForDate('2026-12-25', new Set(['2026-12-25']))).toBe('holiday');
+    expect(dayScopeForDate('kemarin')).toBeNull();
   });
 
   it('rejects a query with neither route nor stop', () => {

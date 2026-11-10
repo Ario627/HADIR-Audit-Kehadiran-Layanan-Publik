@@ -24,6 +24,7 @@ CREATE TYPE report_event_kind AS ENUM (
 CREATE TYPE platform_admin_role AS ENUM ('moderator', 'superadmin');
 CREATE TYPE partner_status AS ENUM ('active', 'suspended', 'revoked');
 CREATE TYPE notice_kind AS ENUM ('detour', 'repair', 'suspension', 'schedule', 'other');
+CREATE TYPE media_status AS ENUM ('pending', 'quarantined', 'approved', 'rejected', 'deleted');
 
 CREATE TABLE institutions (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
@@ -38,8 +39,15 @@ CREATE TABLE partner_users (
   status partner_status NOT NULL DEFAULT 'active'
 );
 
+CREATE TABLE cities (
+  id uuid PRIMARY KEY DEFAULT uuidv7(),
+  code text NOT NULL UNIQUE,
+  name text NOT NULL
+);
+
 CREATE TABLE stops (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
+  city_id uuid REFERENCES cities(id),
   code text NOT NULL UNIQUE,
   name text NOT NULL
 );
@@ -90,7 +98,7 @@ CREATE TABLE report_media (
   width integer,
   height integer,
   sha256 bytea,
-  status text NOT NULL DEFAULT 'pending',
+  status media_status NOT NULL DEFAULT 'pending',
   created_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
@@ -207,6 +215,18 @@ CREATE TABLE rup_packages (
   CONSTRAINT uq_rup_packages UNIQUE (satker, name, fiscal_year, source_url)
 );
 
+CREATE TABLE holiday_calendar (
+  id uuid PRIMARY KEY DEFAULT uuidv7(),
+  city_id uuid REFERENCES cities(id) ON DELETE CASCADE,
+  holiday_date date NOT NULL,
+  name text NOT NULL,
+  source_url text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT uq_holiday_scope_date UNIQUE NULLS NOT DISTINCT (city_id, holiday_date),
+  CONSTRAINT ck_holiday_name CHECK (char_length(name) BETWEEN 1 AND 120),
+  CONSTRAINT ck_holiday_source CHECK (char_length(source_url) BETWEEN 8 AND 500)
+);
+
 CREATE TABLE notices (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   kind notice_kind NOT NULL,
@@ -272,9 +292,11 @@ GRANT SELECT, INSERT, UPDATE ON reports TO hadir_app;
 GRANT SELECT, INSERT ON report_events TO hadir_app;
 GRANT SELECT, INSERT, UPDATE ON report_media TO hadir_app;
 GRANT SELECT, INSERT ON notices TO hadir_app;
+GRANT SELECT ON holiday_calendar TO hadir_app;
 GRANT SELECT, INSERT ON audit_log TO hadir_app;
 GRANT SELECT ON institutions TO hadir_app;
 GRANT SELECT ON stops TO hadir_app;
+GRANT SELECT ON cities TO hadir_app;
 GRANT SELECT ON anchor_log TO hadir_app;
 GRANT INSERT ON anchor_log TO hadir_app;
 GRANT UPDATE ON anchor_log TO hadir_app;

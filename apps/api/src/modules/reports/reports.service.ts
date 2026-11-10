@@ -237,6 +237,7 @@ export class ReportsService {
           category: query.category ?? null,
           status: query.status ?? null,
           bbox,
+          stopId: query.stopId ?? null,
           cursor: parseCursor(query.cursor),
           limit: query.limit,
         }),

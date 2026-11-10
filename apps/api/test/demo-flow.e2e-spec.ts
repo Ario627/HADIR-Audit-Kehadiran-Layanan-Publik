@@ -480,4 +480,38 @@ IF_PRESENT('WIA demo rehearsal against the real migration chain', () => {
       .expect(200);
     expect((meta.body as { methodVersion: string }).methodVersion).toBe('km-v1');
   });
+
+  it('demo 8 — a stop page can list only the reports for that stop', async () => {
+    const board = await request(app.getHttpServer())
+      .get('/v1/reports')
+      .set('Origin', WEB_ORIGIN)
+      .expect(200);
+    const first = (board.body as { data: { publicId: string; stopCode: string }[] }).data[0];
+    if (first === undefined) {
+      throw new Error('papan publik harus berisi satu laporan');
+    }
+    const stop = await request(app.getHttpServer())
+      .get(`/v1/stops/by-code/${first.stopCode}`)
+      .set('Origin', WEB_ORIGIN)
+      .expect(200);
+    const stopId = (stop.body as { data: { id: string } }).data.id;
+
+    const filtered = await request(app.getHttpServer())
+      .get('/v1/reports')
+      .query({ stopId })
+      .set('Origin', WEB_ORIGIN)
+      .expect(200);
+    const rows = (filtered.body as { data: { stopCode: string }[] }).data;
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    for (const row of rows) {
+      expect(row.stopCode).toBe(first.stopCode);
+    }
+
+    const empty = await request(app.getHttpServer())
+      .get('/v1/reports')
+      .query({ stopId: '0192f0d0-0000-7000-8000-00000000ffff' })
+      .set('Origin', WEB_ORIGIN)
+      .expect(200);
+    expect((empty.body as { data: unknown[] }).data).toEqual([]);
+  });
 });

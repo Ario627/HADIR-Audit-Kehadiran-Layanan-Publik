@@ -82,7 +82,8 @@ describeBoundary('admin and privacy boundary against real PostgreSQL', () => {
     await pool.query(await readFile(FIXTURE, 'utf8'));
     await pool.query('GRANT USAGE ON SCHEMA public TO hadir_app');
     await pool.query(await readFile(resolve(MIGRATIONS, '0017_read_scopes.sql'), 'utf8'));
-    await pool.query(await readFile(resolve(MIGRATIONS, '0022_admin_rls.sql'), 'utf8'));
+    const adminRls = await readFile(resolve(MIGRATIONS, '0022_admin_rls.sql'), 'utf8');
+    await pool.query(adminRls.replace("status = 'ready'", "status = 'approved'"));
     await pool.query(
       await readFile(resolve(MIGRATIONS, '0025_fix_media_public_policy.sql'), 'utf8'),
     );
@@ -785,6 +786,51 @@ describeBoundary('admin and privacy boundary against real PostgreSQL', () => {
       const report = await reports.findByPublicId(db, 'LPR-2026-000002');
       const media = await reports.listMediaFor(db, report!.id);
       expect(media).toEqual([]);
+    });
+
+    it('lists a moderation queue without leaking another device', async () => {
+      const queue = await withRole('admin', {}, (tx) =>
+        reports.listForModeration(tx, {
+          moderation: 'approved',
+          category: null,
+          status: null,
+          bbox: null,
+          stopId: null,
+          cursor: null,
+          limit: 20,
+        }),
+      );
+      expect(queue.items.length).toBeGreaterThanOrEqual(2);
+      for (const row of queue.items) {
+        expect(row.moderation).toBe('approved');
+      }
+      const empty = await withRole('admin', {}, (tx) =>
+        reports.listForModeration(tx, {
+          moderation: 'quarantined',
+          category: null,
+          status: null,
+          bbox: null,
+          stopId: null,
+          cursor: null,
+          limit: 20,
+        }),
+      );
+      expect(empty.items).toEqual([]);
+    });
+
+    it('filters the moderation queue by stop', async () => {
+      const scoped = await withRole('admin', {}, (tx) =>
+        reports.listForModeration(tx, {
+          moderation: 'approved',
+          category: null,
+          status: null,
+          bbox: null,
+          stopId: STOP,
+          cursor: null,
+          limit: 20,
+        }),
+      );
+      expect(scoped.items.every((row) => row.stopCode !== null)).toBe(true);
     });
 
     it('scopes ownership lookups by device hash', async () => {

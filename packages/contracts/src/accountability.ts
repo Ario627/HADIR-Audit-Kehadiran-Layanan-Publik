@@ -160,6 +160,38 @@ export const CaseFile = z.object({
 
 export type CaseFile = z.infer<typeof CaseFile>;
 
+export const ResponseAttestationDocument = z.object({
+  responseId: Uuid,
+  reportPublicId: z.string().min(6).max(40),
+  institutionId: Uuid,
+  kind: ResponseKind,
+  bodyDigestHex: z.string().length(64).nullable(),
+  evidenceUrls: z.array(z.string().min(1).max(500)).max(5),
+  publishedAt: IsoDateTime,
+  correctsResponseId: Uuid.nullable(),
+  canonicalPayload: z.string().min(1).max(4000),
+  signatureBase64: z.string().max(200).nullable(),
+  signatureAlgorithm: z.string().max(40).nullable(),
+  signingKeyId: z.string().max(64).nullable(),
+  publicKeyBase64: z.string().max(200).nullable(),
+  keyFingerprint: z.string().max(20).nullable(),
+  signedAt: IsoDateTime.nullable(),
+  signed: z.boolean(),
+  verification: z.object({
+    status: z.enum([
+      'unsigned',
+      'verified',
+      'signature_mismatch',
+      'unsupported_algorithm',
+      'payload_mismatch',
+      'structural_invalid',
+    ]),
+    message: z.string().min(1).max(400),
+  }),
+});
+
+export type ResponseAttestationDocument = z.infer<typeof ResponseAttestationDocument>;
+
 export const ResponseCreate = z
   .object({
     kind: ResponseKind.default('initial'),

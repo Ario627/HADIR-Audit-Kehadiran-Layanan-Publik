@@ -113,8 +113,21 @@ describe('exportFilename', () => {
 });
 
 describe('saveBlob', () => {
-  it('reports failure outside a browser instead of throwing', () => {
-    expect(saveBlob(new Blob(['x']), 'a.csv')).toBe(false);
+  it('reports failure when the browser refuses to mint an object URL', () => {
+    const original = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: undefined,
+    });
+    try {
+      expect(saveBlob(new Blob(['x']), 'a.csv')).toBe(false);
+    } finally {
+      if (original === undefined) {
+        Reflect.deleteProperty(URL, 'createObjectURL');
+      } else {
+        Object.defineProperty(URL, 'createObjectURL', original);
+      }
+    }
   });
 });
 

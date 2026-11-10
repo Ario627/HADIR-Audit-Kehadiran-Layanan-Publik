@@ -1,9 +1,13 @@
 import type {
   AppealView,
+  CitySlaOverrideView,
+  Commitment,
+  HolidayView,
   InstitutionScorecard,
   InstitutionScorecardList,
+  PanelCandidates,
   PanelView,
-  ResponseAttestation,
+  SlaBreachItem,
 } from '@hadir/contracts';
 import type { PayloadSchema } from './api';
 import {
@@ -23,18 +27,22 @@ const APPEAL_STATUSES = [
   'upheld',
   'overturned',
 ] as const;
-const ATTESTATION_STATUSES = [
-  'unsigned',
-  'verified',
-  'signature_mismatch',
-  'unsupported_algorithm',
-  'payload_mismatch',
-  'structural_invalid',
-] as const;
 const SCORECARD_STATES = ['insufficient', 'provisional', 'published'] as const;
 const BANDS = ['very_low', 'low', 'moderate', 'high'] as const;
 const PANEL_ROLES = ['observer', 'verifier'] as const;
 const PANEL_STATUSES = ['invited', 'active', 'declined', 'revoked'] as const;
+const COMMITMENT_STATUSES = ['draft', 'verified', 'superseded', 'revoked'] as const;
+const COMMITMENT_KINDS = ['headway', 'span', 'reliability', 'other'] as const;
+const DAY_SCOPES = ['all', 'weekday', 'weekend', 'holiday'] as const;
+const PRIORITIES = ['low', 'normal', 'high', 'critical'] as const;
+const SLA_PHASES = ['acknowledge', 'respond', 'resolve'] as const;
+const REFUSALS = [
+  'self',
+  'different_city',
+  'already_active',
+  'revoked_recently',
+  'unknown_city',
+] as const;
 
 function pick<T extends string>(
   allowed: readonly T[],
@@ -58,26 +66,6 @@ function readStringList(value: unknown, max: number, limit: number): string[] | 
   return out;
 }
 
-function toAttestation(value: unknown): ResponseAttestation | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  const status = pick(ATTESTATION_STATUSES, value.status);
-  const message = readText(value.message, 400);
-  if (status === null || message === null) {
-    return null;
-  }
-  return {
-    signed: value.signed === true,
-    status,
-    bodyDigest: readNullableText(value.bodyDigest, 64) ?? null,
-    signingKeyId: readNullableText(value.signingKeyId, 64) ?? null,
-    keyFingerprint: readNullableText(value.keyFingerprint, 20) ?? null,
-    algorithm: readNullableText(value.algorithm, 40) ?? null,
-    signedAt: readIsoDateTime(value.signedAt),
-    message,
-  };
-}
 
 export function toAppealView(value: unknown): AppealView | null {
   if (!isRecord(value)) {
@@ -92,6 +80,8 @@ export function toAppealView(value: unknown): AppealView | null {
   const evidenceUrls = readStringList(value.evidenceUrls, 500, 5);
   const windowDeadline = readIsoDateTime(value.windowDeadline);
   const createdAt = readIsoDateTime(value.createdAt);
+  const decisionDue = readIsoDateTime(value.decisionDue);
+  const decisionLabel = readText(value.decisionLabel, 80);
   const summary = readText(value.summary, 300);
   if (
     id === null ||
@@ -103,6 +93,8 @@ export function toAppealView(value: unknown): AppealView | null {
     evidenceUrls === null ||
     windowDeadline === null ||
     createdAt === null ||
+    decisionDue === null ||
+    decisionLabel === null ||
     summary === null
   ) {
     return null;
@@ -121,6 +113,9 @@ export function toAppealView(value: unknown): AppealView | null {
     windowDeadline,
     windowOpen: value.windowOpen === true,
     createdAt,
+    decisionDue,
+    decisionOverdue: value.decisionOverdue === true,
+    decisionLabel,
     summary,
   };
 }
@@ -155,13 +150,12 @@ export function toPanelView(value: unknown): PanelView | null {
   }
   const publicId = readText(value.publicId, 40);
   const cityId = readText(value.cityId, 64);
-  const claimantInstitutionId = readText(value.claimantInstitutionId, 64);
+  const claimantInstitutionId = readNullableId(value.claimantInstitutionId, 64);
   const claimantInstitutionName = readText(value.claimantInstitutionName, 160);
   const summary = readText(value.summary, 300);
   if (
     publicId === null ||
     cityId === null ||
-    claimantInstitutionId === null ||
     claimantInstitutionName === null ||
     summary === null
   ) {
@@ -381,5 +375,316 @@ export const scorecardListSchema: PayloadSchema<InstitutionScorecardList> = {
         caveats,
       },
     };
+  },
+};
+
+function readNullableId(value: unknown, max: number): string | null {
+  return value === null ? null : (readText(value, max) ?? null);
+}
+
+function readAnchorDate(value: unknown): string | null {
+  const text = readText(value, 10);
+  return text !== null && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/u.test(text) ? text : null;
+}
+
+function readItems(value: unknown, max: number): unknown[] | null {
+  if (!isRecord(value) || !Array.isArray(value.items) || value.items.length > max) {
+    return null;
+  }
+  return value.items;
+}
+
+export const slaBreachListSchema: PayloadSchema<SlaBreachItem[]> = {
+  safeParse(value: unknown) {
+    const rows = readItems(value, 200);
+    if (rows === null) {
+      return { success: false };
+    }
+    const items: SlaBreachItem[] = [];
+    for (const entry of rows) {
+      if (!isRecord(entry)) {
+        return { success: false };
+      }
+      const publicId = readText(entry.publicId, 40);
+      const category = readText(entry.category, 40);
+      const status = readText(entry.status, 40);
+      const priority = pick(PRIORITIES, entry.priority);
+      const phase = pick(SLA_PHASES, entry.phase);
+      const dueAt = readIsoDateTime(entry.dueAt);
+      const hoursLate = readNumber(entry.hoursLate);
+      const escalation = readCount(entry.escalation, 3);
+      if (
+        publicId === null ||
+        category === null ||
+        status === null ||
+        priority === null ||
+        phase === null ||
+        dueAt === null ||
+        hoursLate === null ||
+        escalation === null
+      ) {
+        return { success: false };
+      }
+      items.push({
+        publicId,
+        category,
+        status,
+        institutionName: readNullableText(entry.institutionName, 160) ?? null,
+        priority,
+        phase,
+        dueAt,
+        hoursLate,
+        escalation,
+      });
+    }
+    return { success: true, data: items };
+  },
+};
+
+export const citySlaSchema: PayloadSchema<CitySlaOverrideView> = {
+  safeParse(value: unknown) {
+    if (!isRecord(value)) {
+      return { success: false };
+    }
+    const cityId = readText(value.cityId, 64);
+    const cityName = readText(value.cityName, 120);
+    const priority = pick(PRIORITIES, value.priority);
+    const acknowledgeHours = readNumber(value.acknowledgeHours);
+    const respondHours = readNumber(value.respondHours);
+    const resolveHours = readNumber(value.resolveHours);
+    const sourceUrl = readText(value.sourceUrl, 500);
+    if (
+      cityId === null ||
+      cityName === null ||
+      priority === null ||
+      acknowledgeHours === null ||
+      respondHours === null ||
+      resolveHours === null ||
+      sourceUrl === null
+    ) {
+      return { success: false };
+    }
+    return {
+      success: true,
+      data: {
+        cityId,
+        cityName,
+        priority,
+        acknowledgeHours,
+        respondHours,
+        resolveHours,
+        sourceUrl,
+        note: readNullableText(value.note, 500) ?? null,
+      },
+    };
+  },
+};
+
+export const citySlaListSchema: PayloadSchema<CitySlaOverrideView[]> = {
+  safeParse(value: unknown) {
+    const rows = readItems(value, 20);
+    if (rows === null) {
+      return { success: false };
+    }
+    const items: CitySlaOverrideView[] = [];
+    for (const entry of rows) {
+      const parsed = citySlaSchema.safeParse(entry);
+      if (!parsed.success) {
+        return { success: false };
+      }
+      items.push(parsed.data);
+    }
+    return { success: true, data: items };
+  },
+};
+
+function toCommitment(value: unknown): Commitment | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = readText(value.id, 64);
+  const institutionName = readText(value.institutionName, 160);
+  const sourceDocumentUrl = readText(value.sourceDocumentUrl, 500);
+  const status = pick(COMMITMENT_STATUSES, value.status);
+  const kind = pick(COMMITMENT_KINDS, value.kind);
+  const dayScope = pick(DAY_SCOPES, value.dayScope);
+  const validFrom = readAnchorDate(value.validFrom);
+  if (
+    id === null ||
+    institutionName === null ||
+    sourceDocumentUrl === null ||
+    status === null ||
+    kind === null ||
+    dayScope === null ||
+    validFrom === null
+  ) {
+    return null;
+  }
+  return {
+    id,
+    routeId: readNullableId(value.routeId, 64),
+    stopId: readNullableId(value.stopId, 64),
+    kind,
+    dayScope,
+    headwayMin: readNumber(value.headwayMin),
+    spanStart: readNullableText(value.spanStart, 16) ?? null,
+    spanEnd: readNullableText(value.spanEnd, 16) ?? null,
+    sourceDocumentUrl,
+    sourceDocumentTitle: readNullableText(value.sourceDocumentTitle, 200) ?? null,
+    sourceDocumentVersion: readNullableText(value.sourceDocumentVersion, 80) ?? null,
+    validFrom,
+    validUntil: readAnchorDate(value.validUntil),
+    status,
+    verifiedAt: entry2Iso(value.verifiedAt),
+    institutionName,
+  };
+}
+
+function entry2Iso(value: unknown): string | null {
+  return value === null ? null : readIsoDateTime(value);
+}
+
+export const commitmentSchema: PayloadSchema<Commitment> = {
+  safeParse(value: unknown) {
+    const parsed = toCommitment(value);
+    return parsed === null ? { success: false } : { success: true, data: parsed };
+  },
+};
+
+export const commitmentListSchema: PayloadSchema<Commitment[]> = {
+  safeParse(value: unknown) {
+    const rows = readItems(value, 100);
+    if (rows === null) {
+      return { success: false };
+    }
+    const items: Commitment[] = [];
+    for (const entry of rows) {
+      const parsed = toCommitment(entry);
+      if (parsed === null) {
+        return { success: false };
+      }
+      items.push(parsed);
+    }
+    return { success: true, data: items };
+  },
+};
+
+function toHoliday(value: unknown): HolidayView | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const date = readAnchorDate(value.date);
+  const name = readText(value.name, 120);
+  const scope = value.scope === 'national' || value.scope === 'city' ? value.scope : null;
+  const sourceUrl = readText(value.sourceUrl, 500);
+  if (date === null || name === null || scope === null || sourceUrl === null) {
+    return null;
+  }
+  return { date, name, scope, cityId: readNullableId(value.cityId, 64), sourceUrl };
+}
+
+export const holidaySchema: PayloadSchema<HolidayView> = {
+  safeParse(value: unknown) {
+    const parsed = toHoliday(value);
+    return parsed === null ? { success: false } : { success: true, data: parsed };
+  },
+};
+
+export const holidayListSchema: PayloadSchema<HolidayView[]> = {
+  safeParse(value: unknown) {
+    const rows = readItems(value, 400);
+    if (rows === null) {
+      return { success: false };
+    }
+    const items: HolidayView[] = [];
+    for (const entry of rows) {
+      const parsed = toHoliday(entry);
+      if (parsed === null) {
+        return { success: false };
+      }
+      items.push(parsed);
+    }
+    return { success: true, data: items };
+  },
+};
+
+export const panelCandidatesSchema: PayloadSchema<PanelCandidates> = {
+  safeParse(value: unknown) {
+    if (!isRecord(value) || !Array.isArray(value.candidates) || value.candidates.length > 100) {
+      return { success: false };
+    }
+    const publicId = readText(value.publicId, 40);
+    if (publicId === null) {
+      return { success: false };
+    }
+    const candidates: PanelCandidates['candidates'] = [];
+    for (const entry of value.candidates) {
+      if (!isRecord(entry)) {
+        return { success: false };
+      }
+      const institutionId = readText(entry.institutionId, 64);
+      const displayName = readText(entry.displayName, 160);
+      const role = pick(PANEL_ROLES, entry.role);
+      const reason = readText(entry.reason, 300);
+      if (institutionId === null || displayName === null || role === null || reason === null) {
+        return { success: false };
+      }
+      const refusal = entry.refusal === null ? null : pick(REFUSALS, entry.refusal);
+      if (entry.refusal !== null && refusal === null) {
+        return { success: false };
+      }
+      candidates.push({
+        institutionId,
+        displayName,
+        eligible: entry.eligible === true,
+        role,
+        refusal,
+        reason,
+      });
+    }
+    return {
+      success: true,
+      data: { publicId, cityId: readNullableId(value.cityId, 64), candidates },
+    };
+  },
+};
+
+export interface CommitmentChangeView {
+  validFrom: string;
+  validUntil: string | null;
+  headwayMin: number | null;
+  sourceDocumentUrl: string;
+  sourceDocumentVersion: string | null;
+  supersededBy: string | null;
+  days: number | null;
+}
+
+export const commitmentHistorySchema: PayloadSchema<CommitmentChangeView[]> = {
+  safeParse(value: unknown) {
+    const rows = readItems(value, 50);
+    if (rows === null) {
+      return { success: false };
+    }
+    const items: CommitmentChangeView[] = [];
+    for (const entry of rows) {
+      if (!isRecord(entry)) {
+        return { success: false };
+      }
+      const validFrom = readAnchorDate(entry.validFrom);
+      const sourceDocumentUrl = readText(entry.sourceDocumentUrl, 500);
+      if (validFrom === null || sourceDocumentUrl === null) {
+        return { success: false };
+      }
+      items.push({
+        validFrom,
+        validUntil: readAnchorDate(entry.validUntil),
+        headwayMin: readNumber(entry.headwayMin),
+        sourceDocumentUrl,
+        sourceDocumentVersion: readNullableText(entry.sourceDocumentVersion, 80) ?? null,
+        supersededBy: readNullableId(entry.supersededBy, 64),
+        days: readCount(entry.days, 100_000),
+      });
+    }
+    return { success: true, data: items };
   },
 };

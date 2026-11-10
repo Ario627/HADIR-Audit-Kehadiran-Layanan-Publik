@@ -3,7 +3,13 @@ import type {
   AdminAuditEntry,
   AdminAuditQuery,
   AdminChainVerifyResult,
+  AdminReportDetail,
+  AdminReportQueue,
+  AdminReportQueueQuery,
+  AdminReportRow,
+  CityList,
   AdminFlagInput,
+  AdminHolidayInput,
   AdminModerationInput,
   AdminModerationResult,
   AdminNoticeInput,
@@ -11,6 +17,7 @@ import type {
   AdminRupImportInput,
   AdminRupImportResult,
   FeatureFlag,
+  HolidayView,
   Notice,
   TransparencyAnchor,
 } from '@hadir/contracts';
@@ -108,6 +115,107 @@ export class AdminService {
 
   private adminContext(session: PlatformAdminSession, requestId: string) {
     return { scope: 'admin' as const, requestId, userId: session.adminId };
+  }
+
+  async moderationQueue(input: AdminReportQueueQuery): Promise<AdminReportQueue> {
+    const { items } = await this.run(
+      (tx) =>
+        this.reports.listForModeration(tx, {
+          moderation: input.moderation,
+          category: input.category ?? null,
+          status: null,
+          bbox: null,
+          stopId: null,
+          cursor: input.cursor === undefined ? null : decodeCursor(input.cursor),
+          limit: input.limit,
+        }),
+      { scope: 'admin', requestId: 'admin-moderation-queue' },
+    );
+    const rows: AdminReportRow[] = [];
+    for (const row of items) {
+      if (row.stopCode === null || row.stopName === null) {
+        continue;
+      }
+      rows.push({
+        publicId: row.publicId,
+        category: row.category as AdminReportRow['category'],
+        status: row.status as AdminReportRow['status'],
+        moderation: row.moderation,
+        stopCode: row.stopCode,
+        stopName: row.stopName,
+        institutionName: row.authorityName,
+        text: row.text,
+        evidenceLevel: row.evidenceLevel,
+        corroborationCount: row.corroborationCount,
+        createdAt: row.createdAt.toISOString(),
+      });
+    }
+    return { items: rows, count: rows.length };
+  }
+
+  async reportDetail(publicId: string): Promise<AdminReportDetail> {
+    const row = await this.run(
+      (tx) => this.reports.findByPublicId(tx, publicId),
+      { scope: 'admin', requestId: 'admin-report-detail' },
+    );
+    if (row === null || row.stopCode === null || row.stopName === null) {
+      throw new AppError('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
+    }
+    return {
+      publicId: row.publicId,
+      category: row.category as AdminReportDetail['category'],
+      status: row.status as AdminReportDetail['status'],
+      moderation: row.moderation,
+      stopCode: row.stopCode,
+      stopName: row.stopName,
+      institutionName: row.authorityName,
+      text: row.text,
+      evidenceLevel: row.evidenceLevel,
+      corroborationCount: row.corroborationCount,
+      createdAt: row.createdAt.toISOString(),
+      followUpAt: row.followUpAt === null ? null : row.followUpAt.toISOString(),
+      resolvedAt: row.resolvedAt === null ? null : row.resolvedAt.toISOString(),
+      evidenceScore: row.evidenceScore,
+    };
+  }
+
+  async cities(): Promise<CityList> {
+    const items = await this.run(
+      (tx) => this.repository.listCities(tx),
+      { scope: 'admin', requestId: 'admin-cities' },
+    );
+    return { items, count: items.length };
+  }
+
+  async upsertHoliday(
+    input: AdminHolidayInput,
+    session: PlatformAdminSession,
+    requestId: string,
+  ): Promise<HolidayView> {
+    const saved = await this.run(
+      (tx) =>
+        this.repository.upsertHoliday(tx, {
+          date: input.date,
+          name: input.name,
+          cityId: input.cityId ?? null,
+          sourceUrl: input.sourceUrl,
+        }),
+      this.adminContext(session, requestId),
+    );
+    await this.audit.record({
+      action: 'admin.holiday_saved',
+      objectType: 'holiday_calendar',
+      objectId: `${saved.cityId ?? 'national'}:${saved.date}`,
+      actor: { kind: 'superadmin', userId: session.adminId },
+      payload: { date: saved.date, name: saved.name, cityId: saved.cityId },
+    });
+    return {
+      date: saved.date,
+      name: saved.name,
+      scope: saved.cityId === null ? 'national' : 'city',
+      cityId: saved.cityId,
+      sourceUrl: saved.sourceUrl,
+    };
   }
 
   async createNotice(

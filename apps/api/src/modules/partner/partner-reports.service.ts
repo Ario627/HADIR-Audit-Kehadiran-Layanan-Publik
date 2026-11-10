@@ -63,6 +63,7 @@ export class PartnerReportsService {
           category: query.category ?? null,
           status: query.status ?? null,
           bbox: null,
+          stopId: null,
           cursor: parseCursor(query.cursor),
           limit: query.limit,
         }),

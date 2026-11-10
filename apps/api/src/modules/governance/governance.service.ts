@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  APPEAL_DECISION_DAYS,
   appealAdmissibility,
+  appealDecisionClock,
   appealGroundsLabel,
   appealOutcomeEffect,
   appealWindow,
@@ -70,7 +72,7 @@ function toPanelView(
   return {
     publicId,
     cityId,
-    claimantInstitutionId: claimant?.claimantInstitutionId ?? '',
+    claimantInstitutionId: claimant?.claimantInstitutionId ?? null,
     claimantInstitutionName: claimant?.claimantInstitutionName ?? 'Instansi tidak tercatat',
     grants: grants.map((grant) => ({
       id: grant.id,
@@ -98,6 +100,11 @@ function toPanelView(
 
 function toAppealView(row: AppealRow, now: string): AppealView {
   const window = appealWindow(row.grounds, row.decidedAt?.toISOString() ?? row.createdAt.toISOString(), now);
+  const clock = appealDecisionClock(
+    row.createdAt.toISOString(),
+    now,
+    row.decidedAt === null ? null : row.decidedAt.toISOString(),
+  );
   return {
     id: row.id,
     publicId: row.publicId,
@@ -112,6 +119,9 @@ function toAppealView(row: AppealRow, now: string): AppealView {
     windowDeadline: window.deadline,
     windowOpen: window.open,
     createdAt: row.createdAt.toISOString(),
+    decisionDue: clock?.dueAt ?? (row.decisionDue ?? row.createdAt).toISOString(),
+    decisionOverdue: clock?.overdue ?? false,
+    decisionLabel: clock?.label ?? 'Belum diputuskan',
     summary: describeAppeal(row.grounds, row.status, null),
   };
 }
@@ -177,7 +187,7 @@ export class GovernanceService {
     const candidates: PanelCandidateView[] = loaded.rows.map((row) => {
       const grantRevoked = row.grantStatus === 'revoked' && row.grantRevokedAt !== null;
       const eligibility = panelEligibility({
-        claimantInstitutionId: loaded.report.institutionId as string,
+        claimantInstitutionId: loaded.report.institutionId,
         claimantCityId: loaded.report.cityId,
         candidate: {
           institutionId: row.institutionId,
@@ -373,6 +383,11 @@ export class GovernanceService {
           return { error: 'not_found' as const };
         }
         const counts = await this.repository.countAppealsForReport(tx, report.id);
+        const deviceAppealsLastMonth = await this.repository.countDeviceAppealsSince(
+          tx,
+          device.hash,
+          new Date(Date.parse(now) - 30 * 86_400_000),
+        );
         const decidedAt = await this.repository.findDecisionMoment(
           tx,
           report.id,
@@ -385,6 +400,7 @@ export class GovernanceService {
           submittedAt: now,
           now,
           priorAppeals: counts.total,
+          deviceAppealsLastMonth,
         });
         if (!admissibility.admissible) {
           return { error: 'inadmissible' as const, detail: admissibility.message };
@@ -395,6 +411,7 @@ export class GovernanceService {
           grounds: input.grounds,
           statement: input.statement,
           evidenceUrls: input.evidenceUrls,
+          decisionDays: APPEAL_DECISION_DAYS,
         });
         if (id === null) {
           return {

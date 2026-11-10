@@ -24,7 +24,7 @@ export type PanelGrantView = z.infer<typeof PanelGrantView>;
 export const PanelView = z.object({
   publicId: z.string().min(6).max(40),
   cityId: Uuid,
-  claimantInstitutionId: Uuid,
+  claimantInstitutionId: Uuid.nullable(),
   claimantInstitutionName: z.string().min(1).max(160),
   grants: z.array(PanelGrantView).max(30),
   quorum: z.object({
@@ -97,6 +97,9 @@ export const AppealView = z.object({
   windowDeadline: IsoDateTime,
   windowOpen: z.boolean(),
   createdAt: IsoDateTime,
+  decisionDue: IsoDateTime,
+  decisionOverdue: z.boolean(),
+  decisionLabel: z.string().min(1).max(80),
   summary: z.string().min(1).max(300),
 });
 

@@ -107,17 +107,12 @@ describeBoundary('governance boundary against real PostgreSQL', () => {
       END;
       $$ LANGUAGE plpgsql
     `);
-    await pool.query(`
-      CREATE TABLE cities (
-        id uuid PRIMARY KEY DEFAULT uuidv7(),
-        code text NOT NULL UNIQUE,
-        name text NOT NULL
-      )
-    `);
     await pool.query(
       'ALTER TABLE institutions ADD COLUMN city_id uuid REFERENCES cities(id)',
     );
-    await pool.query('ALTER TABLE stops ADD COLUMN city_id uuid REFERENCES cities(id)');
+    await pool.query(
+      'ALTER TABLE stops ADD COLUMN IF NOT EXISTS city_id uuid REFERENCES cities(id)',
+    );
     await pool.query('ALTER TABLE reports ADD COLUMN city_id uuid REFERENCES cities(id)');
     await pool.query(`
       CREATE TYPE resolution_method AS ENUM (
@@ -180,17 +175,6 @@ describeBoundary('governance boundary against real PostgreSQL', () => {
       GRANT SELECT, INSERT, UPDATE ON partner_users, resolution_verifications,
         report_sla TO hadir_app
     `);
-    await pool.query(`
-      CREATE TYPE media_status AS ENUM ('pending', 'ready', 'quarantined', 'deleted')
-    `);
-    await pool.query(`ALTER TABLE report_media ALTER COLUMN status DROP DEFAULT`);
-    await pool.query(`
-      ALTER TABLE report_media
-        ALTER COLUMN status TYPE media_status USING status::media_status
-    `);
-    await pool.query(`
-      ALTER TABLE report_media ALTER COLUMN status SET DEFAULT 'pending'::media_status
-    `);
     await pool.query(
       await readFile(resolve(MIGRATIONS, '0024z_media_status_moderation.sql'), 'utf8'),
     );
@@ -199,6 +183,9 @@ describeBoundary('governance boundary against real PostgreSQL', () => {
     );
     await pool.query(
       await readFile(resolve(MIGRATIONS, '0030_response_attestation.sql'), 'utf8'),
+    );
+    await pool.query(
+      'ALTER TABLE report_appeals ADD COLUMN IF NOT EXISTS decision_due timestamp with time zone',
     );
     await pool.query('ALTER TABLE reports ENABLE ROW LEVEL SECURITY');
     await pool.query('ALTER TABLE report_media ENABLE ROW LEVEL SECURITY');
@@ -530,6 +517,56 @@ describeBoundary('governance boundary against real PostgreSQL', () => {
         [CITY],
       ),
     ).rejects.toThrow(/ck_city_sla_order/u);
+  });
+
+  it('counts an SLA breach on any phase, not only acknowledgement', async () => {
+    await pool.query('DELETE FROM report_sla');
+    const seedSla = async (ackDue: string, respondDue: string, resolveDue: string) => {
+      await pool.query('DELETE FROM report_sla');
+      await pool.query(
+        `INSERT INTO report_sla (
+           report_id, policy_version, priority, acknowledge_hours, respond_hours,
+           resolve_hours, acknowledge_due, respond_due, resolve_due
+         )
+         SELECT r.id, 'sla-test', 'normal', 24, 72, 168,
+                now() + $1::interval, now() + $2::interval, now() + $3::interval
+         FROM reports r
+         WHERE r.public_id = 'LPR-2026-000202'`,
+        [ackDue, respondDue, resolveDue],
+      );
+    };
+    const counts = async () =>
+      asApp('public', {}, async (tx) => repository.scorecardCounts(tx, DISHUB, 90));
+
+    await seedSla('24 hours', '72 hours', '168 hours');
+    const open = await counts();
+    expect(open.slaTracked).toBe(1);
+    expect(open.slaMet).toBe(1);
+
+    await seedSla('-1 hour', '72 hours', '168 hours');
+    const missingAck = await counts();
+    expect(missingAck.slaTracked).toBe(1);
+    expect(missingAck.slaMet).toBe(0);
+
+    await pool.query(
+      `INSERT INTO report_events (report_id, seq, kind, actor_type, actor_id,
+         prev_hash, payload_hash, chain_hash, created_at)
+       SELECT r.id, 3, 'acknowledged', 'partner', NULL, repeat('4',32)::bytea,
+              repeat('5',32)::bytea, repeat('6',32)::bytea,
+              now() + interval '30 minutes'
+       FROM reports r WHERE r.public_id = 'LPR-2026-000202'`,
+    );
+    const lateAck = await counts();
+    expect(lateAck.slaMet).toBe(0);
+
+    await pool.query(
+      `UPDATE report_events SET created_at = now() - interval '2 hours'
+       WHERE kind = 'acknowledged'`,
+    );
+    const onTime = await counts();
+    expect(onTime.slaMet).toBe(1);
+
+    await pool.query(`DELETE FROM report_events WHERE kind = 'acknowledged'`);
   });
 
   it('computes scorecard counts from real rows', async () => {

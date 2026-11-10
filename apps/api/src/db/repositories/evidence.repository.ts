@@ -89,6 +89,19 @@ export interface SnapshotInsert {
   provenance: Record<string, unknown>;
 }
 
+export interface HolidayFilters {
+  from: string;
+  to: string;
+  cityId: string | null;
+}
+
+export interface HolidayRow {
+  date: string;
+  name: string;
+  cityId: string | null;
+  sourceUrl: string;
+}
+
 export interface ContextFilters {
   stopId: string | null;
   routeId: string | null;
@@ -101,6 +114,15 @@ export interface ObservationPointRow {
   day: string;
   hour: number;
   deviceDay: string;
+}
+
+export interface ObservationRowFull {
+  day: string;
+  hour: number;
+  outcome: string;
+  durationS: number;
+  deviceDayHash: string;
+  qualityFlags: readonly string[];
 }
 
 export interface ObservationFilters {
@@ -503,6 +525,105 @@ export class EvidenceRepository {
         day: asString(record.day, 'day'),
         hour: asNumber(record.hour) ?? 0,
         deviceDay: asString(record.device_day, 'device_day'),
+      };
+    });
+  }
+
+  async loadObservations(
+    executor: Database | Transaction,
+    filters: ObservationFilters,
+  ): Promise<ObservationRowFull[]> {
+    const routeCondition =
+      filters.routeId === null ? sql`` : sql`AND route_id = ${filters.routeId}`;
+    const simulatedCondition = filters.includeSimulated
+      ? sql``
+      : sql`AND NOT ('simulated' = ANY(quality_flags))`;
+    const result = await executor.execute(sql`
+      SELECT
+        to_char(started_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD') AS day,
+        EXTRACT(HOUR FROM (started_at AT TIME ZONE 'Asia/Jakarta'))::int AS hour,
+        COALESCE(outcome::text, 'abandoned') AS outcome,
+        GREATEST(0, COALESCE(duration_s, 0))::int AS duration_s,
+        device_hash || ':' ||
+          to_char(started_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD') AS device_day,
+        quality_flags
+      FROM wait_episodes
+      WHERE stop_id = ${filters.stopId}
+        AND started_at >= ${filters.start}
+        AND started_at <= ${filters.end}
+        AND ended_at IS NOT NULL
+        AND NOT ('cluster_anomaly' = ANY(quality_flags))
+        ${routeCondition}
+        ${simulatedCondition}
+      ORDER BY started_at
+      LIMIT 20000
+    `);
+    return result.rows.map((row) => {
+      const record = row as Record<string, unknown>;
+      return {
+        day: asString(record.day, 'day'),
+        hour: asNumber(record.hour) ?? 0,
+        outcome: asString(record.outcome, 'outcome'),
+        durationS: asNumber(record.duration_s) ?? 0,
+        deviceDayHash: asString(record.device_day, 'device_day'),
+        qualityFlags: asStringArray(record.quality_flags),
+      };
+    });
+  }
+
+  async listActiveStopIds(
+    executor: Database | Transaction,
+    since: Date,
+    limit: number,
+  ): Promise<string[]> {
+    const result = await executor.execute(sql`
+      SELECT DISTINCT stop_id::text AS stop_id
+      FROM wait_episodes
+      WHERE started_at >= ${since}
+      ORDER BY stop_id
+      LIMIT ${limit}
+    `);
+    return result.rows.map((row) => asString((row as Record<string, unknown>).stop_id, 'stop_id'));
+  }
+
+  async findStopCityId(
+    executor: Database | Transaction,
+    stopId: string,
+  ): Promise<string | null> {
+    const result = await executor.execute(sql`
+      SELECT city_id FROM stops WHERE id = ${stopId} LIMIT 1
+    `);
+    const row = result.rows[0] as Record<string, unknown> | undefined;
+    return row === undefined ? null : asNullableString(row.city_id);
+  }
+
+  async listHolidays(
+    executor: Database | Transaction,
+    filters: HolidayFilters,
+  ): Promise<HolidayRow[]> {
+    const cityCondition =
+      filters.cityId === null
+        ? sql`city_id IS NULL`
+        : sql`(city_id IS NULL OR city_id = ${filters.cityId})`;
+    const result = await executor.execute(sql`
+      SELECT
+        to_char(holiday_date, 'YYYY-MM-DD') AS holiday_date,
+        name,
+        city_id,
+        source_url
+      FROM holiday_calendar
+      WHERE holiday_date >= ${filters.from}::date
+        AND holiday_date <= ${filters.to}::date
+        AND ${cityCondition}
+      ORDER BY holiday_date, city_id NULLS FIRST
+    `);
+    return result.rows.map((row) => {
+      const record = row as Record<string, unknown>;
+      return {
+        date: asString(record.holiday_date, 'holiday_date'),
+        name: asString(record.name, 'name'),
+        cityId: asNullableString(record.city_id),
+        sourceUrl: asString(record.source_url, 'source_url'),
       };
     });
   }

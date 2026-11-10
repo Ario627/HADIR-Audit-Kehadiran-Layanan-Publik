@@ -1,5 +1,6 @@
 import { recordingAudit } from '../../test-support/audit.stub';
 import type { PartnerSession } from '../../../common/auth/partner-session';
+import type { RequestContext } from '../../../common/http/request-context';
 import type { Transaction } from '../../../db/client';
 import type {
   AccountabilityRepository,
@@ -17,6 +18,8 @@ const POLRES = '0192f0c4-0000-7000-8000-0000000000a2';
 const PUBLIC_ID = 'LPR-2026-000101';
 const REPORT_ID = '0192f0c4-0000-7000-8000-0000000000e1';
 const USER_ID = '0192f0c4-0000-7000-8000-0000000000b1';
+
+const DEVICE = 'a'.repeat(64);
 
 const passthroughRunner = async <T>(
   work: (tx: Transaction) => Promise<T>,
@@ -114,6 +117,10 @@ function build(overrides: {
   sla?: SlaRow | null;
   insertFails?: boolean;
   breaches?: Awaited<ReturnType<AccountabilityRepository['listBreaches']>>;
+  contexts?: RequestContext[];
+  attestationRow?: Awaited<
+    ReturnType<AccountabilityRepository['findResponseAttestation']>
+  >;
 } = {}): { service: AccountabilityService; doubles: Doubles } {
   const appended: { kind: string; payload: Record<string, unknown> }[] = [];
   const statuses: string[] = [];
@@ -129,6 +136,7 @@ function build(overrides: {
         : [...(overrides.verifications ?? [])],
     listClosureAnswers: async () => [...(overrides.closures ?? [])],
     listAttestations: async () => [],
+    findResponseAttestation: async () => overrides.attestationRow ?? null,
     attachAttestation: async () => true,
     findSla: async () => (overrides.sla === undefined ? slaRow() : overrides.sla),
     insertResponse: async () => '0192f0c4-0000-7000-8000-0000000000f9',
@@ -152,13 +160,20 @@ function build(overrides: {
 
   const auditRecorder = recordingAudit();
   const audit = auditRecorder.service;
+  const recordingRunner = async <T>(
+    work: (tx: Transaction) => Promise<T>,
+    context: RequestContext,
+  ): Promise<T> => {
+    overrides.contexts?.push(context);
+    return work({} as Transaction);
+  };
 
   return {
     service: new AccountabilityService(
       repository,
       reports,
       audit,
-      passthroughRunner,
+      overrides.contexts === undefined ? passthroughRunner : recordingRunner,
     ),
     doubles: {
       repository,
@@ -172,7 +187,63 @@ function build(overrides: {
   };
 }
 
+describe('AccountabilityService.responseAttestation', () => {
+  const base = {
+    responseId: '0192f0c4-0000-7000-8000-0000000000e1',
+    reportPublicId: PUBLIC_ID,
+    institutionId: DISHUB,
+    kind: 'initial',
+    bodyDigestHex: 'a'.repeat(64),
+    evidenceUrls: ['https://dishub.test/bukti'],
+    publishedAt: new Date('2026-10-02T00:00:00.000Z'),
+    correctsResponseId: null,
+    signatureBase64: null,
+    signatureAlgorithm: null,
+    signingKeyId: null,
+    publicKeyBase64: null,
+    signedAt: null,
+  };
+
+  it('publishes the canonical payload for external verification', async () => {
+    const { service } = build({ attestationRow: base });
+    const document = await service.responseAttestation(PUBLIC_ID, base.responseId);
+
+    expect(document.canonicalPayload).toContain(`report=${PUBLIC_ID}`);
+    expect(document.canonicalPayload).toContain(`bodyDigest=${'a'.repeat(64)}`);
+    expect(document.canonicalPayload).toContain('publishedAt=2026-10-02T00:00:00.000Z');
+    expect(document.signed).toBe(false);
+    expect(document.verification.status).toBe('unsigned');
+    expect(document.keyFingerprint).toBeNull();
+  });
+
+  it('rejects an unknown response', async () => {
+    const { service } = build({ attestationRow: null });
+    await expect(service.responseAttestation(PUBLIC_ID, base.responseId)).rejects.toThrow(
+      /tidak ditemukan/u,
+    );
+  });
+});
+
 describe('AccountabilityService.caseFile', () => {
+  it('reads the case file of an unapproved report through the citizen scope', async () => {
+    const contexts: RequestContext[] = [];
+    const { service } = build({ contexts });
+    await service.caseFile(PUBLIC_ID, DEVICE);
+
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0]?.scope).toBe('citizen');
+    expect(contexts[0]?.deviceHash).toBe(DEVICE);
+    expect(contexts[0]?.requestId).toBe(`case-own-${DEVICE.slice(0, 8)}`);
+  });
+
+  it('falls back to the public scope before reporting a missing case', async () => {
+    const contexts: RequestContext[] = [];
+    const { service } = build({ caseRow: null, contexts });
+    await expect(service.caseFile(PUBLIC_ID, DEVICE)).rejects.toThrow(/tidak ditemukan/u);
+
+    expect(contexts.map((context) => context.scope)).toEqual(['citizen', 'public']);
+  });
+
   it('rejects an unknown report', async () => {
     const { service } = build({ caseRow: null });
     await expect(service.caseFile(PUBLIC_ID)).rejects.toThrow(/tidak ditemukan/u);

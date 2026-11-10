@@ -1,10 +1,15 @@
+import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { db } from '../../db/client';
 import {
   analyzeRepresentativeness,
   benchmarkMessage,
+  buildProvenance,
+  canonicalDataset,
+  formatDigest,
   annotateObservations,
   commitmentChanges,
+  dayScopeForDate,
   describeCommitment,
   qualityBreakdown,
   resolveBenchmark,
@@ -24,6 +29,8 @@ import type {
   ContextTimeline,
   EvidencePack,
   EvidenceQuery,
+  HolidayQuery,
+  HolidayView,
   IncidentCreate,
   OperationalContext,
   ProvenanceDocument,
@@ -35,12 +42,23 @@ import {
   EvidenceRepository,
   type CommitmentRow,
   type ContextRow,
+  type HolidayRow,
   type SnapshotRow,
 } from '../../db/repositories/evidence.repository';
 import { StopsService } from '../stops/stops.service';
 import { EstimatesService } from '../estimates/estimates.service';
 
 const DAY_MS = 86_400_000;
+
+function toHolidayView(row: HolidayRow): HolidayView {
+  return {
+    date: row.date,
+    name: row.name,
+    scope: row.cityId === null ? 'national' : 'city',
+    cityId: row.cityId,
+    sourceUrl: row.sourceUrl,
+  };
+}
 const CONTEXT_LOOKBACK_DAYS = 30;
 
 function toRecord(row: CommitmentRow): CommitmentRecord {
@@ -249,11 +267,30 @@ export class EvidenceService {
     });
     const records = rows.map(toRecord);
     if (dayScope === undefined) {
-      return toBenchmark(resolveBenchmarkForStop(records, stopId, routeId, onDate));
+      const holidays = await this.calendarFor(stopId, onDate);
+      return toBenchmark(
+        resolveBenchmarkForStop(records, stopId, routeId, onDate, holidays.dates),
+      );
     }
     return toBenchmark(
       resolveBenchmark(records, { stopId, routeId, onDate, dayScope }),
     );
+  }
+
+  private async calendarFor(
+    stopId: string,
+    date: string,
+  ): Promise<{ dates: ReadonlySet<string>; name: string | null }> {
+    const cityId = await this.repository.findStopCityId(db, stopId);
+    const rows = await this.repository.listHolidays(db, {
+      from: date,
+      to: date,
+      cityId,
+    });
+    return {
+      dates: new Set(rows.map((row) => row.date)),
+      name: rows[0]?.name ?? null,
+    };
   }
 
   async context(query: ContextQuery): Promise<ContextTimeline> {
@@ -306,12 +343,16 @@ export class EvidenceService {
       }),
     ]);
 
+    const today = now.toISOString().slice(0, 10);
+    const calendar = await this.calendarFor(stopId, today);
+    const dayScope = dayScopeForDate(today, calendar.dates) ?? 'weekday';
     const benchmark = toBenchmark(
       resolveBenchmarkForStop(
         commitmentRows.map(toRecord),
         stopId,
         query.routeId ?? null,
-        now.toISOString().slice(0, 10),
+        today,
+        calendar.dates,
       ),
     );
     const ci = confidenceWidth(estimate.metrics.ci);
@@ -350,6 +391,8 @@ export class EvidenceService {
       stopCode: stop.code,
       stopName: stop.name,
       generatedAt: now.toISOString(),
+      dayScope,
+      holidayName: calendar.name,
       benchmark,
       quality: {
         dimensions: quality.dimensions.map((dimension) => ({
@@ -378,6 +421,22 @@ export class EvidenceService {
       snapshot: snapshot === null ? null : toSnapshot(snapshot),
       disclaimer: this.disclaimer(annotation.annotatedShare),
     };
+  }
+
+  async holidays(query: HolidayQuery): Promise<HolidayView[]> {
+    const now = new Date();
+    const from = query.from ?? `${now.getUTCFullYear()}-01-01`;
+    const to = query.to ?? `${now.getUTCFullYear() + 1}-12-31`;
+    const rows = await this.repository.listHolidays(db, {
+      from,
+      to,
+      cityId: query.cityId ?? null,
+    });
+    return rows.map(toHolidayView);
+  }
+
+  async holidaysForDate(date: string, cityId: string | null): Promise<HolidayRow[]> {
+    return this.repository.listHolidays(db, { from: date, to: date, cityId });
   }
 
   private disclaimer(annotatedShare: number): string {
@@ -488,6 +547,117 @@ export class EvidenceService {
     );
   }
 
+  async refreshSnapshot(stopId: string, windowLabel: '7d' | '30d' = '7d'): Promise<{
+    inserted: boolean;
+    snapshotId: string | null;
+    inputRows: number;
+  }> {
+    const stop = await this.stops.getById(stopId);
+    const now = new Date();
+    const window = windowFor(windowLabel, now);
+    const estimate = await this.estimates.estimate(stopId, { window: windowLabel });
+    const observations = await this.repository.loadObservations(db, {
+      stopId,
+      routeId: null,
+      start: window.start,
+      end: window.end,
+      includeSimulated: estimate.simulated,
+    });
+    const rows = observations.map((row) => ({
+      day: row.day,
+      hour: row.hour,
+      outcome: row.outcome,
+      durationS: row.durationS,
+      deviceDayHash: row.deviceDayHash,
+      qualityFlags: [...row.qualityFlags],
+    }));
+    const canonical = canonicalDataset(rows);
+    const datasetDigest = createHash('sha256').update(canonical).digest();
+    const outputDigest = createHash('sha256')
+      .update(
+        JSON.stringify({
+          methodVersion: estimate.methodVersion,
+          n: estimate.metrics.n,
+          medianMin: estimate.metrics.medianMin,
+          rmstMin: estimate.metrics.rmstMin,
+          p95Min: estimate.metrics.p95Min,
+          ci: estimate.metrics.ci,
+          evidence: estimate.evidence,
+          direction: estimate.direction,
+        }),
+      )
+      .digest();
+    const provenance = buildProvenance({
+      subject: { kind: 'stop_estimate', ref: stopId },
+      methodVersion: estimate.methodVersion,
+      parameters: { window: windowLabel, tauMinutes: estimate.sample.thresholdMin === null ? null : estimate.sample.thresholdMin },
+      dataset: {
+        canonical,
+        digestHex: datasetDigest.toString('hex'),
+        rows: rows.length,
+        firstDay: rows[0]?.day ?? null,
+        lastDay: rows.at(-1)?.day ?? null,
+      },
+      outputDigestHex: outputDigest.toString('hex'),
+      agent: {
+        id: 'hadir:software/estimator',
+        role: 'software',
+        label: 'HADIR estimator',
+      },
+      activityStart: window.start.toISOString(),
+      activityEnd: now.toISOString(),
+      sources: [
+        {
+          kind: 'citizen_observation',
+          ref: `wait_episodes:${stop.code}`,
+          retrievedAt: now.toISOString(),
+          url: null,
+        },
+      ],
+    });
+
+    const inserted = await this.repository.insertSnapshot(db, {
+      subjectKind: 'stop_estimate',
+      subjectRef: stopId,
+      methodVersion: estimate.methodVersion,
+      parameters: { window: windowLabel },
+      datasetDigest,
+      outputDigest,
+      inputRows: rows.length,
+      windowStart: window.start,
+      windowEnd: window.end,
+      evidenceLevel: estimate.evidence,
+      direction: estimate.direction,
+      warnings: [...estimate.warnings],
+      provenance: provenance as unknown as Record<string, unknown>,
+    });
+
+    return {
+      inserted: inserted !== null,
+      snapshotId: inserted?.id ?? null,
+      inputRows: rows.length,
+    };
+  }
+
+  async refreshSnapshotsForActiveStops(limit: number): Promise<{
+    stops: number;
+    inserted: number;
+    rows: number;
+  }> {
+    const since = new Date(Date.now() - 7 * DAY_MS);
+    const stopIds = await this.repository.listActiveStopIds(db, since, limit);
+    let inserted = 0;
+    let rows = 0;
+    for (const stopId of stopIds) {
+      const result = await this.refreshSnapshot(stopId, '7d');
+      rows += result.inputRows;
+      if (result.inserted) {
+        inserted += 1;
+      }
+    }
+    return { stops: stopIds.length, inserted, rows };
+  }
+
   async verifySnapshot(
     snapshotId: string,
     candidate: {
@@ -507,8 +677,8 @@ export class EvidenceService {
       {
         methodVersion: snapshot.methodVersion,
         parameters: {},
-        datasetDigest: `sha256:${snapshot.datasetDigest.toString('hex')}`,
-        outputDigest: `sha256:${snapshot.outputDigest.toString('hex')}`,
+        datasetDigest: formatDigest('sha256', snapshot.datasetDigest.toString('hex')),
+        outputDigest: formatDigest('sha256', snapshot.outputDigest.toString('hex')),
         inputRows: snapshot.inputRows,
         window: {
           start: snapshot.computedAt.toISOString(),

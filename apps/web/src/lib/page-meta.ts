@@ -102,6 +102,88 @@ const PAGES: Readonly<Record<string, PageMeta>> = {
     description: 'Akar Merkle dan jumlah event pada satu tanggal, sebagai tujuan tautan verifikasi.',
     noindex: false,
   },
+  '/komitmen': {
+    title: 'Janji layanan dan hari libur',
+    description:
+      'Dokumen janji headway yang dipakai sebagai ambang penilaian, riwayat perubahannya, dan kalender hari libur.',
+    noindex: false,
+  },
+  '/sinkron': {
+    title: 'Pusat sinkronisasi',
+    description:
+      'Catatan tunggu dan laporan yang tersimpan di perangkat saat sinyal putus, beserta status pengiriman ulangnya.',
+    noindex: true,
+  },
+  '/admin': {
+    title: 'Konsol platform',
+    description: 'Antrean moderasi, pelanggaran tenggat, dan banding yang menunggu keputusan.',
+    noindex: true,
+  },
+  '/admin/masuk': {
+    title: 'Masuk konsol platform',
+    description: 'Pintu masuk moderator dan superadmin platform dengan kata sandi dan kode TOTP.',
+    noindex: true,
+  },
+  '/admin/moderasi': {
+    title: 'Antrean moderasi',
+    description: 'Putuskan laporan warga tampil publik atau tidak, dengan alasan yang teraudit.',
+    noindex: true,
+  },
+  '/admin/laporan/$publicId': {
+    title: 'Laporan di konsol',
+    description: 'Isi laporan, keputusan moderasi, panel independen, dan verifikasi penyelesaian.',
+    noindex: true,
+  },
+  '/admin/banding': {
+    title: 'Antrean banding',
+    description: 'Banding warga atas penolakan, hasil penyelesaian, atau moderasi konten.',
+    noindex: true,
+  },
+  '/admin/sla': {
+    title: 'Tenggat layanan',
+    description: 'Pelanggaran tenggat per laporan dan override tenggat per kota.',
+    noindex: true,
+  },
+  '/admin/komitmen': {
+    title: 'Janji layanan',
+    description: 'Catat, verifikasi, dan cabut janji headway yang dipakai sebagai ambang penilaian.',
+    noindex: true,
+  },
+  '/admin/konteks': {
+    title: 'Konteks operasional',
+    description: 'Hari libur, pengumuman gangguan, dan insiden yang menutup periode pengamatan.',
+    noindex: true,
+  },
+  '/admin/rantai': {
+    title: 'Rantai bukti',
+    description: 'Periksa keutuhan hash event laporan dan segel anchor harian.',
+    noindex: true,
+  },
+  '/admin/audit': {
+    title: 'Log audit',
+    description: 'Jejak tindakan moderator dan superadmin beserta id permintaannya.',
+    noindex: true,
+  },
+  '/admin/rup': {
+    title: 'Paket RUP',
+    description: 'Impor dan telusuri paket pengadaan yang ditautkan ke laporan warga.',
+    noindex: true,
+  },
+  '/admin/retensi': {
+    title: 'Kebijakan retensi',
+    description: 'Umur simpan data, baris terlindungi, dan riwayat putaran pembersihan.',
+    noindex: true,
+  },
+  '/admin/flag': {
+    title: 'Saklar fitur',
+    description: 'Nilai flag yang dibaca saat permintaan berjalan beserta waktu perubahannya.',
+    noindex: true,
+  },
+  '/partner/anggota': {
+    title: 'Anggota instansi',
+    description: 'Daftar akun mitra, peran, undangan terbuka, dan pencabutan akses.',
+    noindex: true,
+  },
   '/privasi': {
     title: 'Privasi dan data saya',
     description:

@@ -48,6 +48,7 @@ export interface AppealRow {
   createdAt: Date;
   reportStatus: string;
   deviceHash: string;
+  decisionDue: Date | null;
 }
 
 export interface AppealCounts {
@@ -155,6 +156,7 @@ function toAppeal(row: Record<string, unknown>): AppealRow {
     createdAt: date(row.created_at),
     reportStatus: text(row.report_status),
     deviceHash: text(row.device_hash),
+    decisionDue: nullableDate(row.decision_due),
   };
 }
 
@@ -162,7 +164,7 @@ const APPEAL_SELECT = sql`
   a.id, r.public_id, a.report_id, a.grounds::text AS grounds,
   a.status::text AS status, a.statement, a.evidence_urls, a.decided_by,
   a.decided_at, a.decision_note, a.outcome_transition, a.created_at,
-  r.status::text AS report_status, a.device_hash
+  r.status::text AS report_status, a.device_hash, a.decision_due
 `;
 
 const PANEL_SELECT = sql`
@@ -188,10 +190,11 @@ export class GovernanceRepository {
     createdAt: Date;
   } | null> {
     const result = await executor.execute(sql`
-      SELECT r.id, r.public_id, r.status::text AS status, r.city_id,
+      SELECT r.id, r.public_id, r.status::text AS status, s.city_id,
              r.institution_id, r.device_hash, r.moderation::text AS moderation,
              r.created_at
       FROM reports r
+      LEFT JOIN stops s ON s.id = r.stop_id
       WHERE r.public_id = ${publicId}
       LIMIT 1
     `);
@@ -440,6 +443,21 @@ export class GovernanceRepository {
     return result.rows.map((row) => toAppeal(row as Record<string, unknown>));
   }
 
+  async countDeviceAppealsSince(
+    executor: Database | Transaction,
+    deviceHash: string,
+    since: Date,
+  ): Promise<number> {
+    const result = await executor.execute(sql`
+      SELECT count(*)::int AS total
+      FROM report_appeals
+      WHERE device_hash = ${deviceHash}
+        AND created_at >= ${since}
+        AND status <> 'inadmissible'
+    `);
+    return int((result.rows[0] as Record<string, unknown> | undefined)?.total);
+  }
+
   async countAppealsForReport(
     executor: Database | Transaction,
     reportId: string,
@@ -469,6 +487,7 @@ export class GovernanceRepository {
       grounds: AppealGrounds;
       statement: string;
       evidenceUrls: readonly string[];
+      decisionDays: number;
     },
   ): Promise<string | null> {
     const urls =
@@ -480,10 +499,13 @@ export class GovernanceRepository {
               .join(',')}]::text[]`,
           );
     const result = await tx.execute(sql`
-      INSERT INTO report_appeals (report_id, device_hash, grounds, statement, evidence_urls)
+      INSERT INTO report_appeals (
+        report_id, device_hash, grounds, statement, evidence_urls, decision_due
+      )
       VALUES (
         ${input.reportId}, ${input.deviceHash}, ${input.grounds}::appeal_grounds,
-        ${input.statement}, ${urls}
+        ${input.statement}, ${urls},
+        now() + (${input.decisionDays} * interval '1 day')
       )
       ON CONFLICT DO NOTHING
       RETURNING id
@@ -601,6 +623,35 @@ export class GovernanceRepository {
             WHERE e.report_id = r.id
               AND e.kind = 'acknowledged'
               AND e.created_at > s.acknowledge_due
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM report_events e
+            WHERE e.report_id = r.id
+              AND e.kind = 'responded'
+              AND e.created_at > s.respond_due
+          )
+          AND NOT (
+            s.resolve_due < now()
+            AND NOT EXISTS (
+              SELECT 1 FROM report_events e
+              WHERE e.report_id = r.id
+                AND e.kind = 'verified_resolved'
+                AND e.created_at <= s.resolve_due
+            )
+          )
+          AND NOT (
+            s.acknowledge_due < now()
+            AND NOT EXISTS (
+              SELECT 1 FROM report_events e
+              WHERE e.report_id = r.id AND e.kind = 'acknowledged'
+            )
+          )
+          AND NOT (
+            s.respond_due < now()
+            AND NOT EXISTS (
+              SELECT 1 FROM report_events e
+              WHERE e.report_id = r.id AND e.kind = 'responded'
+            )
           )
         )::int AS sla_met,
         count(*) FILTER (WHERE r.status IN ('claimed_resolved', 'verified_resolved', 'disputed'))::int
