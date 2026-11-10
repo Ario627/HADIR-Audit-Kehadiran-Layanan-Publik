@@ -2,6 +2,7 @@ import type { Transaction } from '../../db/client';
 import type { TransactionRunner } from '../../db/transaction-runner';
 import type { PlatformAdminSession } from '../../common/auth/platform-session';
 import type { AdminRepository } from '../../db/repositories/admin.repository';
+import type { ReportsRepository } from '../../db/repositories/reports.repository';
 import { auditStub } from '../../test-support/audit.stub';
 import { AdminService } from './admin.service';
 import type { TransparencyService } from '../transparency/transparency.service';
@@ -131,5 +132,110 @@ describe('AdminService.importRup', () => {
         'req-6',
       ),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+});
+
+describe('AdminService moderation queue', () => {
+  function buildQueue(rows: unknown[]): AdminService {
+    const reports = {
+      listForModeration: async (_tx: unknown, filters: { moderation: string }) => {
+        expect(filters.moderation).toBe('pending');
+        return { items: rows, hasMore: false };
+      },
+    } as unknown as ReportsRepository;
+    return new AdminService(
+      {} as unknown as AdminRepository,
+      reports,
+      auditStub(),
+      {} as unknown as TransparencyService,
+      passthroughRunner,
+    );
+  }
+
+  const row = {
+    publicId: 'LPR-2026-000123',
+    category: 'service_wait',
+    status: 'submitted',
+    moderation: 'pending',
+    stopCode: 'BMS-A12',
+    stopName: 'Halte UMP',
+    authorityName: 'Dishub Banyumas',
+    text: 'Bus tidak datang selama dua puluh menit.',
+    evidenceScore: 0.4,
+    evidenceLevel: 'indication',
+    corroborationCount: 2,
+    createdAt: new Date('2026-11-10T03:00:00.000Z'),
+    resolvedAt: null,
+    followUpAt: null,
+    deviceHash: 'a'.repeat(64),
+    id: '0192f0c4-0000-7000-8000-0000000000a1',
+  };
+
+  it('maps rows and drops reports without a stop', async () => {
+    const service = buildQueue([row, { ...row, publicId: 'LPR-2026-000124', stopCode: null }]);
+    const result = await service.moderationQueue({ moderation: 'pending', limit: 20 });
+    expect(result.count).toBe(1);
+    expect(result.items[0]).toMatchObject({
+      publicId: 'LPR-2026-000123',
+      stopCode: 'BMS-A12',
+      institutionName: 'Dishub Banyumas',
+    });
+  });
+
+  it('does not leak the device hash into the queue', async () => {
+    const service = buildQueue([row]);
+    const result = await service.moderationQueue({ moderation: 'pending', limit: 20 });
+    expect(JSON.stringify(result)).not.toContain('a'.repeat(64));
+  });
+
+  it('rejects an unknown report on detail', async () => {
+    const reports = {
+      findByPublicId: async () => null,
+    } as unknown as ReportsRepository;
+    const service = new AdminService(
+      {} as unknown as AdminRepository,
+      reports,
+      auditStub(),
+      {} as unknown as TransparencyService,
+      passthroughRunner,
+    );
+    await expect(service.reportDetail('LPR-2026-000404')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+
+  it('returns the detail with score and follow-up date', async () => {
+    const reports = {
+      findByPublicId: async () => row,
+    } as unknown as ReportsRepository;
+    const service = new AdminService(
+      {} as unknown as AdminRepository,
+      reports,
+      auditStub(),
+      {} as unknown as TransparencyService,
+      passthroughRunner,
+    );
+    const detail = await service.reportDetail('LPR-2026-000123');
+    expect(detail.evidenceScore).toBe(0.4);
+    expect(detail.followUpAt).toBeNull();
+    expect(detail.createdAt).toBe('2026-11-10T03:00:00.000Z');
+  });
+
+  it('lists cities through the admin scope', async () => {
+    const repository = {
+      listCities: async () => [
+        { id: '0192f0c4-0000-7000-8000-0000000000b1', code: 'BMS', name: 'Banyumas', timezone: 'Asia/Jakarta' },
+      ],
+    } as unknown as AdminRepository;
+    const service = new AdminService(
+      repository,
+      {} as unknown as ReportsRepository,
+      auditStub(),
+      {} as unknown as TransparencyService,
+      passthroughRunner,
+    );
+    const result = await service.cities();
+    expect(result.count).toBe(1);
+    expect(result.items[0]?.code).toBe('BMS');
   });
 });

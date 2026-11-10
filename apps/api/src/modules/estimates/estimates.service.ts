@@ -234,7 +234,9 @@ export class EstimatesService {
       simulated,
       sample: {
         days: result.days,
-        devices: result.devices,
+        devices: result.deviceDays,
+        deviceDays: result.deviceDays,
+        populationLabel: 'device_day_pseudonyms',
         clusters: result.clusters,
         designEffect: result.designEffect,
         thresholdMin: result.thresholdMin,

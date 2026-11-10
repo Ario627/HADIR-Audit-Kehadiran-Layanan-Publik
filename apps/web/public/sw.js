@@ -7,6 +7,8 @@ const API_PREFIX = '/v1/';
 const ASSET_PREFIXES = ['/assets/', '/icons/'];
 const PRIVATE_PREFIXES = [
   '/v1/reports/mine',
+  '/v1/appeals',
+  '/v1/accountability',
   '/v1/episodes',
   '/v1/devices',
   '/v1/partner',

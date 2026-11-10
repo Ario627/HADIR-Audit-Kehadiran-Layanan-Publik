@@ -33,6 +33,12 @@ const EnvSchema = z.object({
   ADMIN_SESSION_IDLE_MINUTES: z.coerce.number().int().min(5).max(240).default(20),
   ADMIN_SESSION_ABSOLUTE_HOURS: z.coerce.number().int().min(1).max(24).default(8),
   ADMIN_COOKIE_NAME: z.string().min(1).max(64).optional(),
+  ANCHOR_SIGNING_KEY: z.string().min(32).max(8192).optional(),
+  ANCHOR_SIGNING_KEY_ID: z.string().min(1).max(64).optional(),
+  ANCHOR_PUBLIC_KEY_TRUST: z.string().max(4096).optional(),
+  RESPONSE_SIGNING_KEY: z.string().min(32).max(8192).optional(),
+  RESPONSE_SIGNING_KEY_ID: z.string().min(1).max(64).optional(),
+  RETENTION_ENABLED: z.enum(['true', 'false']).default('true'),
   INTERNAL_SHARED_SECRET: z.string().min(16).max(512).optional(),
   METRICS_ENABLED: z.enum(['true', 'false']).default('true'),
   DATABASE_URL: DatabaseUrl.default('postgres://hadir:hadir@localhost:5432/hadir'),
@@ -163,6 +169,15 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
   if (value.NODE_ENV === 'production' && (value.INTERNAL_SHARED_SECRET ?? '').length < 32) {
     throw new Error('INTERNAL_SHARED_SECRET wajib minimal 32 karakter di production.');
   }
+  if (
+    value.NODE_ENV === 'production' &&
+    ((value.ANCHOR_SIGNING_KEY ?? '').length < 32 ||
+      (value.ANCHOR_SIGNING_KEY_ID ?? '').trim().length === 0)
+  ) {
+    throw new Error(
+      'ANCHOR_SIGNING_KEY dan ANCHOR_SIGNING_KEY_ID wajib diisi di production agar anchor dapat ditandatangani.',
+    );
+  }
 
   const isProduction = value.NODE_ENV === 'production';
 
@@ -181,6 +196,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
     adminSessionAbsoluteMs: value.ADMIN_SESSION_ABSOLUTE_HOURS * 3_600_000,
     internalSharedSecret: value.INTERNAL_SHARED_SECRET?.trim() || null,
     metricsEnabled: value.METRICS_ENABLED === 'true',
+    anchorSigningKey: value.ANCHOR_SIGNING_KEY?.trim() || null,
+    anchorSigningKeyId: value.ANCHOR_SIGNING_KEY_ID?.trim() || null,
+    responseSigningKey: value.RESPONSE_SIGNING_KEY?.trim() || null,
+    responseSigningKeyId: value.RESPONSE_SIGNING_KEY_ID?.trim() || null,
+    anchorPublicKeyTrust: value.ANCHOR_PUBLIC_KEY_TRUST?.trim() || null,
+    retentionEnabled: value.RETENTION_ENABLED === 'true',
     partnerSessionIdleHours: value.PARTNER_SESSION_IDLE_HOURS,
     partnerSessionAbsoluteDays: value.PARTNER_SESSION_ABSOLUTE_DAYS,
     partnerSessionFreshMinutes: value.PARTNER_SESSION_FRESH_MINUTES,

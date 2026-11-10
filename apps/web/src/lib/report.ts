@@ -216,7 +216,7 @@ export function isTerminalStatus(status: ReportStatus): boolean {
 
 const OWN_REPORTS_KEY = 'hadir.reports.v1';
 const OWN_REPORTS_LIMIT = 20;
-const PUBLIC_ID_PATTERN = /^[A-Za-z0-9]{6,40}$/;
+const PUBLIC_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{5,39}$/;
 
 function ownStorage(): Storage | null {
   try {

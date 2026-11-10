@@ -3,6 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { StatePanel } from '../components/StatePanel';
 import { AnchorCard } from '../features/transparency/AnchorCard';
+import { AnchorKeys, ProofChecker, fetchAnchorKeys } from '../features/transparency/AnchorProof';
 import {
   ANCHOR_SCAN_DAYS,
   anchorDayCount,
@@ -29,6 +30,13 @@ function TransparencyIndexPage() {
   const [scanNote, setScanNote] = useState<string | null>(null);
   const anchor = useQuery(transparencyAnchorQuery(date));
   const methodology = useQuery(methodologyQuery());
+  const keys = useQuery({
+    queryKey: ['transparency', 'keys'] as const,
+    queryFn: fetchAnchorKeys,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: false,
+  });
   const now = Date.now();
   const changelog = methodology.data === undefined ? [] : changelogOf(methodology.data);
 
@@ -151,6 +159,21 @@ function TransparencyIndexPage() {
           </p>
         </>
       )}
+
+      <ProofChecker />
+
+      <section className="transparency" aria-labelledby="keys-title">
+        <h2 className="section-title" id="keys-title">
+          Kunci penanda tangan
+        </h2>
+        {keys.isError ? (
+          <p className="note">Daftar kunci belum bisa dimuat sekarang.</p>
+        ) : keys.data === undefined ? (
+          <p className="note">Memuat daftar kunci.</p>
+        ) : (
+          <AnchorKeys keys={keys.data} />
+        )}
+      </section>
 
       <section className="transparency" aria-labelledby="changelog-title">
         <h2 className="section-title" id="changelog-title">

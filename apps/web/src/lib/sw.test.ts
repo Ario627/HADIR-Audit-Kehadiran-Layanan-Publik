@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
-const SOURCE_PATH = fileURLToPath(new URL('../../public/sw.js', import.meta.url));
+const SOURCE_PATH = resolve(process.cwd(), 'public/sw.js');
 const ORIGIN = 'https://hadir.id';
 
 interface FakeResponse {
@@ -161,6 +161,9 @@ describe('service worker privacy', () => {
   const privatePaths = [
     '/v1/reports/mine',
     '/v1/reports/mine/ABC123',
+    '/v1/appeals/mine',
+    '/v1/appeals',
+    '/v1/accountability/partner/queue',
     '/v1/episodes/0192f0d0',
     '/v1/devices',
     '/v1/partner/reports',

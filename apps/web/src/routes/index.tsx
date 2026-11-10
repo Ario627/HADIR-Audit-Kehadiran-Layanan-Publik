@@ -72,7 +72,6 @@ function BoardPage() {
     <>
       <div className="deck">
         <div className="deck-lead">
-          <p className="label">Papan · 7 hari terakhir</p>
           <h1 className="page-title">Berapa lama orang benar-benar menunggu</h1>
           <p className="page-lede">
             Angka di papan ini berasal dari episode tunggu yang dicatat warga di halte terdaftar.

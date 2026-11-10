@@ -157,6 +157,7 @@ function buildService(overrides: Overrides = {}): {
       auditStub(),
       passthroughRunner,
       uploads,
+      { freezeSla: async () => true } as never,
     ),
     log,
   };

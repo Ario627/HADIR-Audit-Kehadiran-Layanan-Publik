@@ -1,7 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, createFileRoute } from '@tanstack/react-router';
 import { StatePanel } from '../components/StatePanel';
+import { AppealSection } from '../features/report/AppealSection';
 import { ReportActions } from '../features/report/ReportActions';
+import { CaseTrackerSection } from '../features/report/CaseTracker';
+import { ReportMedia } from '../features/report/ReportMedia';
 import { ReportSummary } from '../features/report/ReportSummary';
 import { ReportTimeline } from '../features/report/ReportTimeline';
 import { describeError } from '../lib/errors';
@@ -56,8 +59,13 @@ function ReportPage() {
   return (
     <>
       <ReportSummary report={report} isOwn={isOwnReport(report.publicId)} />
+      <ReportMedia publicId={report.publicId} />
       <ReportActions report={report} />
+      <CaseTrackerSection publicId={report.publicId} />
       <ReportTimeline events={report.events} />
+      {isOwnReport(report.publicId) ? (
+        <AppealSection publicId={report.publicId} />
+      ) : null}
 
       <p className="note">
         Halaman ini publik. Teks laporan tampil, catatan internal instansi tidak; email pelapor tidak

@@ -10,6 +10,9 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as InstansiRouteImport } from './routes/instansi'
+import { Route as KomitmenRouteImport } from './routes/komitmen'
 import { Route as LaporRouteImport } from './routes/lapor'
 import { Route as MasukRouteImport } from './routes/masuk'
 import { Route as MetodologiRouteImport } from './routes/metodologi'
@@ -18,11 +21,25 @@ import { Route as PetaRouteImport } from './routes/peta'
 import { Route as PrivasiRouteImport } from './routes/privasi'
 import { Route as ScanRouteImport } from './routes/scan'
 import { Route as SekitarRouteImport } from './routes/sekitar'
+import { Route as SinkronRouteImport } from './routes/sinkron'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as AdminAuditRouteImport } from './routes/admin.audit'
+import { Route as AdminBandingRouteImport } from './routes/admin.banding'
+import { Route as AdminFlagRouteImport } from './routes/admin.flag'
+import { Route as AdminKomitmenRouteImport } from './routes/admin.komitmen'
+import { Route as AdminKonteksRouteImport } from './routes/admin.konteks'
+import { Route as AdminMasukRouteImport } from './routes/admin.masuk'
+import { Route as AdminModerasiRouteImport } from './routes/admin.moderasi'
+import { Route as AdminRantaiRouteImport } from './routes/admin.rantai'
+import { Route as AdminRetensiRouteImport } from './routes/admin.retensi'
+import { Route as AdminRupRouteImport } from './routes/admin.rup'
+import { Route as AdminSlaRouteImport } from './routes/admin.sla'
 import { Route as KoridorRouteIdRouteImport } from './routes/koridor.$routeId'
 import { Route as LaporDraftIdRouteImport } from './routes/lapor.$draftId'
 import { Route as LaporanPublicIdRouteImport } from './routes/laporan.$publicId'
 import { Route as PartnerIndexRouteImport } from './routes/partner.index'
 import { Route as PartnerAnalitikRouteImport } from './routes/partner.analitik'
+import { Route as PartnerAnggotaRouteImport } from './routes/partner.anggota'
 import { Route as PartnerEksporRouteImport } from './routes/partner.ekspor'
 import { Route as PartnerPengaturanRouteImport } from './routes/partner.pengaturan'
 import { Route as RadarRouteIdRouteImport } from './routes/radar.$routeId'
@@ -31,12 +48,28 @@ import { Route as SStopCodeRouteImport } from './routes/s.$stopCode'
 import { Route as TransparansiIndexRouteImport } from './routes/transparansi.index'
 import { Route as TransparansiDateRouteImport } from './routes/transparansi.$date'
 import { Route as WaitEpisodeIdRouteImport } from './routes/wait.$episodeId'
+import { Route as AdminLaporanPublicIdRouteImport } from './routes/admin.laporan.$publicId'
 import { Route as PartnerLaporanIndexRouteImport } from './routes/partner.laporan.index'
 import { Route as PartnerLaporanPublicIdRouteImport } from './routes/partner.laporan.$publicId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InstansiRoute = InstansiRouteImport.update({
+  id: '/instansi',
+  path: '/instansi',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KomitmenRoute = KomitmenRouteImport.update({
+  id: '/komitmen',
+  path: '/komitmen',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LaporRoute = LaporRouteImport.update({
@@ -79,6 +112,71 @@ const SekitarRoute = SekitarRouteImport.update({
   path: '/sekitar',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SinkronRoute = SinkronRouteImport.update({
+  id: '/sinkron',
+  path: '/sinkron',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAuditRoute = AdminAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminBandingRoute = AdminBandingRouteImport.update({
+  id: '/banding',
+  path: '/banding',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminFlagRoute = AdminFlagRouteImport.update({
+  id: '/flag',
+  path: '/flag',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminKomitmenRoute = AdminKomitmenRouteImport.update({
+  id: '/komitmen',
+  path: '/komitmen',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminKonteksRoute = AdminKonteksRouteImport.update({
+  id: '/konteks',
+  path: '/konteks',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminMasukRoute = AdminMasukRouteImport.update({
+  id: '/masuk',
+  path: '/masuk',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminModerasiRoute = AdminModerasiRouteImport.update({
+  id: '/moderasi',
+  path: '/moderasi',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminRantaiRoute = AdminRantaiRouteImport.update({
+  id: '/rantai',
+  path: '/rantai',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminRetensiRoute = AdminRetensiRouteImport.update({
+  id: '/retensi',
+  path: '/retensi',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminRupRoute = AdminRupRouteImport.update({
+  id: '/rup',
+  path: '/rup',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSlaRoute = AdminSlaRouteImport.update({
+  id: '/sla',
+  path: '/sla',
+  getParentRoute: () => AdminRoute,
+} as any)
 const KoridorRouteIdRoute = KoridorRouteIdRouteImport.update({
   id: '/koridor/$routeId',
   path: '/koridor/$routeId',
@@ -102,6 +200,11 @@ const PartnerIndexRoute = PartnerIndexRouteImport.update({
 const PartnerAnalitikRoute = PartnerAnalitikRouteImport.update({
   id: '/analitik',
   path: '/analitik',
+  getParentRoute: () => PartnerRoute,
+} as any)
+const PartnerAnggotaRoute = PartnerAnggotaRouteImport.update({
+  id: '/anggota',
+  path: '/anggota',
   getParentRoute: () => PartnerRoute,
 } as any)
 const PartnerEksporRoute = PartnerEksporRouteImport.update({
@@ -144,6 +247,11 @@ const WaitEpisodeIdRoute = WaitEpisodeIdRouteImport.update({
   path: '/wait/$episodeId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminLaporanPublicIdRoute = AdminLaporanPublicIdRouteImport.update({
+  id: '/laporan/$publicId',
+  path: '/laporan/$publicId',
+  getParentRoute: () => AdminRoute,
+} as any)
 const PartnerLaporanIndexRoute = PartnerLaporanIndexRouteImport.update({
   id: '/laporan/',
   path: '/laporan/',
@@ -157,6 +265,9 @@ const PartnerLaporanPublicIdRoute = PartnerLaporanPublicIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/instansi': typeof InstansiRoute
+  '/komitmen': typeof KomitmenRoute
   '/lapor': typeof LaporRouteWithChildren
   '/masuk': typeof MasukRoute
   '/metodologi': typeof MetodologiRoute
@@ -165,10 +276,23 @@ export interface FileRoutesByFullPath {
   '/privasi': typeof PrivasiRoute
   '/scan': typeof ScanRoute
   '/sekitar': typeof SekitarRoute
+  '/sinkron': typeof SinkronRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/banding': typeof AdminBandingRoute
+  '/admin/flag': typeof AdminFlagRoute
+  '/admin/komitmen': typeof AdminKomitmenRoute
+  '/admin/konteks': typeof AdminKonteksRoute
+  '/admin/masuk': typeof AdminMasukRoute
+  '/admin/moderasi': typeof AdminModerasiRoute
+  '/admin/rantai': typeof AdminRantaiRoute
+  '/admin/retensi': typeof AdminRetensiRoute
+  '/admin/rup': typeof AdminRupRoute
+  '/admin/sla': typeof AdminSlaRoute
   '/koridor/$routeId': typeof KoridorRouteIdRoute
   '/lapor/$draftId': typeof LaporDraftIdRoute
   '/laporan/$publicId': typeof LaporanPublicIdRoute
   '/partner/analitik': typeof PartnerAnalitikRoute
+  '/partner/anggota': typeof PartnerAnggotaRoute
   '/partner/ekspor': typeof PartnerEksporRoute
   '/partner/pengaturan': typeof PartnerPengaturanRoute
   '/radar/$routeId': typeof RadarRouteIdRoute
@@ -176,13 +300,17 @@ export interface FileRoutesByFullPath {
   '/s/$stopCode': typeof SStopCodeRoute
   '/transparansi/$date': typeof TransparansiDateRoute
   '/wait/$episodeId': typeof WaitEpisodeIdRoute
+  '/admin/': typeof AdminIndexRoute
   '/partner/': typeof PartnerIndexRoute
   '/transparansi/': typeof TransparansiIndexRoute
+  '/admin/laporan/$publicId': typeof AdminLaporanPublicIdRoute
   '/partner/laporan/$publicId': typeof PartnerLaporanPublicIdRoute
   '/partner/laporan/': typeof PartnerLaporanIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/instansi': typeof InstansiRoute
+  '/komitmen': typeof KomitmenRoute
   '/lapor': typeof LaporRouteWithChildren
   '/masuk': typeof MasukRoute
   '/metodologi': typeof MetodologiRoute
@@ -190,10 +318,23 @@ export interface FileRoutesByTo {
   '/privasi': typeof PrivasiRoute
   '/scan': typeof ScanRoute
   '/sekitar': typeof SekitarRoute
+  '/sinkron': typeof SinkronRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/banding': typeof AdminBandingRoute
+  '/admin/flag': typeof AdminFlagRoute
+  '/admin/komitmen': typeof AdminKomitmenRoute
+  '/admin/konteks': typeof AdminKonteksRoute
+  '/admin/masuk': typeof AdminMasukRoute
+  '/admin/moderasi': typeof AdminModerasiRoute
+  '/admin/rantai': typeof AdminRantaiRoute
+  '/admin/retensi': typeof AdminRetensiRoute
+  '/admin/rup': typeof AdminRupRoute
+  '/admin/sla': typeof AdminSlaRoute
   '/koridor/$routeId': typeof KoridorRouteIdRoute
   '/lapor/$draftId': typeof LaporDraftIdRoute
   '/laporan/$publicId': typeof LaporanPublicIdRoute
   '/partner/analitik': typeof PartnerAnalitikRoute
+  '/partner/anggota': typeof PartnerAnggotaRoute
   '/partner/ekspor': typeof PartnerEksporRoute
   '/partner/pengaturan': typeof PartnerPengaturanRoute
   '/radar/$routeId': typeof RadarRouteIdRoute
@@ -201,14 +342,19 @@ export interface FileRoutesByTo {
   '/s/$stopCode': typeof SStopCodeRoute
   '/transparansi/$date': typeof TransparansiDateRoute
   '/wait/$episodeId': typeof WaitEpisodeIdRoute
+  '/admin': typeof AdminIndexRoute
   '/partner': typeof PartnerIndexRoute
   '/transparansi': typeof TransparansiIndexRoute
+  '/admin/laporan/$publicId': typeof AdminLaporanPublicIdRoute
   '/partner/laporan/$publicId': typeof PartnerLaporanPublicIdRoute
   '/partner/laporan': typeof PartnerLaporanIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/instansi': typeof InstansiRoute
+  '/komitmen': typeof KomitmenRoute
   '/lapor': typeof LaporRouteWithChildren
   '/masuk': typeof MasukRoute
   '/metodologi': typeof MetodologiRoute
@@ -217,10 +363,23 @@ export interface FileRoutesById {
   '/privasi': typeof PrivasiRoute
   '/scan': typeof ScanRoute
   '/sekitar': typeof SekitarRoute
+  '/sinkron': typeof SinkronRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/banding': typeof AdminBandingRoute
+  '/admin/flag': typeof AdminFlagRoute
+  '/admin/komitmen': typeof AdminKomitmenRoute
+  '/admin/konteks': typeof AdminKonteksRoute
+  '/admin/masuk': typeof AdminMasukRoute
+  '/admin/moderasi': typeof AdminModerasiRoute
+  '/admin/rantai': typeof AdminRantaiRoute
+  '/admin/retensi': typeof AdminRetensiRoute
+  '/admin/rup': typeof AdminRupRoute
+  '/admin/sla': typeof AdminSlaRoute
   '/koridor/$routeId': typeof KoridorRouteIdRoute
   '/lapor/$draftId': typeof LaporDraftIdRoute
   '/laporan/$publicId': typeof LaporanPublicIdRoute
   '/partner/analitik': typeof PartnerAnalitikRoute
+  '/partner/anggota': typeof PartnerAnggotaRoute
   '/partner/ekspor': typeof PartnerEksporRoute
   '/partner/pengaturan': typeof PartnerPengaturanRoute
   '/radar/$routeId': typeof RadarRouteIdRoute
@@ -228,8 +387,10 @@ export interface FileRoutesById {
   '/s/$stopCode': typeof SStopCodeRoute
   '/transparansi/$date': typeof TransparansiDateRoute
   '/wait/$episodeId': typeof WaitEpisodeIdRoute
+  '/admin/': typeof AdminIndexRoute
   '/partner/': typeof PartnerIndexRoute
   '/transparansi/': typeof TransparansiIndexRoute
+  '/admin/laporan/$publicId': typeof AdminLaporanPublicIdRoute
   '/partner/laporan/$publicId': typeof PartnerLaporanPublicIdRoute
   '/partner/laporan/': typeof PartnerLaporanIndexRoute
 }
@@ -237,6 +398,9 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
+    | '/instansi'
+    | '/komitmen'
     | '/lapor'
     | '/masuk'
     | '/metodologi'
@@ -245,10 +409,23 @@ export interface FileRouteTypes {
     | '/privasi'
     | '/scan'
     | '/sekitar'
+    | '/sinkron'
+    | '/admin/audit'
+    | '/admin/banding'
+    | '/admin/flag'
+    | '/admin/komitmen'
+    | '/admin/konteks'
+    | '/admin/masuk'
+    | '/admin/moderasi'
+    | '/admin/rantai'
+    | '/admin/retensi'
+    | '/admin/rup'
+    | '/admin/sla'
     | '/koridor/$routeId'
     | '/lapor/$draftId'
     | '/laporan/$publicId'
     | '/partner/analitik'
+    | '/partner/anggota'
     | '/partner/ekspor'
     | '/partner/pengaturan'
     | '/radar/$routeId'
@@ -256,13 +433,17 @@ export interface FileRouteTypes {
     | '/s/$stopCode'
     | '/transparansi/$date'
     | '/wait/$episodeId'
+    | '/admin/'
     | '/partner/'
     | '/transparansi/'
+    | '/admin/laporan/$publicId'
     | '/partner/laporan/$publicId'
     | '/partner/laporan/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/instansi'
+    | '/komitmen'
     | '/lapor'
     | '/masuk'
     | '/metodologi'
@@ -270,10 +451,23 @@ export interface FileRouteTypes {
     | '/privasi'
     | '/scan'
     | '/sekitar'
+    | '/sinkron'
+    | '/admin/audit'
+    | '/admin/banding'
+    | '/admin/flag'
+    | '/admin/komitmen'
+    | '/admin/konteks'
+    | '/admin/masuk'
+    | '/admin/moderasi'
+    | '/admin/rantai'
+    | '/admin/retensi'
+    | '/admin/rup'
+    | '/admin/sla'
     | '/koridor/$routeId'
     | '/lapor/$draftId'
     | '/laporan/$publicId'
     | '/partner/analitik'
+    | '/partner/anggota'
     | '/partner/ekspor'
     | '/partner/pengaturan'
     | '/radar/$routeId'
@@ -281,13 +475,18 @@ export interface FileRouteTypes {
     | '/s/$stopCode'
     | '/transparansi/$date'
     | '/wait/$episodeId'
+    | '/admin'
     | '/partner'
     | '/transparansi'
+    | '/admin/laporan/$publicId'
     | '/partner/laporan/$publicId'
     | '/partner/laporan'
   id:
     | '__root__'
     | '/'
+    | '/admin'
+    | '/instansi'
+    | '/komitmen'
     | '/lapor'
     | '/masuk'
     | '/metodologi'
@@ -296,10 +495,23 @@ export interface FileRouteTypes {
     | '/privasi'
     | '/scan'
     | '/sekitar'
+    | '/sinkron'
+    | '/admin/audit'
+    | '/admin/banding'
+    | '/admin/flag'
+    | '/admin/komitmen'
+    | '/admin/konteks'
+    | '/admin/masuk'
+    | '/admin/moderasi'
+    | '/admin/rantai'
+    | '/admin/retensi'
+    | '/admin/rup'
+    | '/admin/sla'
     | '/koridor/$routeId'
     | '/lapor/$draftId'
     | '/laporan/$publicId'
     | '/partner/analitik'
+    | '/partner/anggota'
     | '/partner/ekspor'
     | '/partner/pengaturan'
     | '/radar/$routeId'
@@ -307,14 +519,19 @@ export interface FileRouteTypes {
     | '/s/$stopCode'
     | '/transparansi/$date'
     | '/wait/$episodeId'
+    | '/admin/'
     | '/partner/'
     | '/transparansi/'
+    | '/admin/laporan/$publicId'
     | '/partner/laporan/$publicId'
     | '/partner/laporan/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRouteWithChildren
+  InstansiRoute: typeof InstansiRoute
+  KomitmenRoute: typeof KomitmenRoute
   LaporRoute: typeof LaporRouteWithChildren
   MasukRoute: typeof MasukRoute
   MetodologiRoute: typeof MetodologiRoute
@@ -323,6 +540,7 @@ export interface RootRouteChildren {
   PrivasiRoute: typeof PrivasiRoute
   ScanRoute: typeof ScanRoute
   SekitarRoute: typeof SekitarRoute
+  SinkronRoute: typeof SinkronRoute
   KoridorRouteIdRoute: typeof KoridorRouteIdRoute
   LaporanPublicIdRoute: typeof LaporanPublicIdRoute
   RadarRouteIdRoute: typeof RadarRouteIdRoute
@@ -340,6 +558,27 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/instansi': {
+      id: '/instansi'
+      path: '/instansi'
+      fullPath: '/instansi'
+      preLoaderRoute: typeof InstansiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/komitmen': {
+      id: '/komitmen'
+      path: '/komitmen'
+      fullPath: '/komitmen'
+      preLoaderRoute: typeof KomitmenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/lapor': {
@@ -398,6 +637,97 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SekitarRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sinkron': {
+      id: '/sinkron'
+      path: '/sinkron'
+      fullPath: '/sinkron'
+      preLoaderRoute: typeof SinkronRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/audit': {
+      id: '/admin/audit'
+      path: '/audit'
+      fullPath: '/admin/audit'
+      preLoaderRoute: typeof AdminAuditRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/banding': {
+      id: '/admin/banding'
+      path: '/banding'
+      fullPath: '/admin/banding'
+      preLoaderRoute: typeof AdminBandingRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/flag': {
+      id: '/admin/flag'
+      path: '/flag'
+      fullPath: '/admin/flag'
+      preLoaderRoute: typeof AdminFlagRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/komitmen': {
+      id: '/admin/komitmen'
+      path: '/komitmen'
+      fullPath: '/admin/komitmen'
+      preLoaderRoute: typeof AdminKomitmenRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/konteks': {
+      id: '/admin/konteks'
+      path: '/konteks'
+      fullPath: '/admin/konteks'
+      preLoaderRoute: typeof AdminKonteksRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/masuk': {
+      id: '/admin/masuk'
+      path: '/masuk'
+      fullPath: '/admin/masuk'
+      preLoaderRoute: typeof AdminMasukRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/moderasi': {
+      id: '/admin/moderasi'
+      path: '/moderasi'
+      fullPath: '/admin/moderasi'
+      preLoaderRoute: typeof AdminModerasiRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/rantai': {
+      id: '/admin/rantai'
+      path: '/rantai'
+      fullPath: '/admin/rantai'
+      preLoaderRoute: typeof AdminRantaiRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/retensi': {
+      id: '/admin/retensi'
+      path: '/retensi'
+      fullPath: '/admin/retensi'
+      preLoaderRoute: typeof AdminRetensiRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/rup': {
+      id: '/admin/rup'
+      path: '/rup'
+      fullPath: '/admin/rup'
+      preLoaderRoute: typeof AdminRupRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/sla': {
+      id: '/admin/sla'
+      path: '/sla'
+      fullPath: '/admin/sla'
+      preLoaderRoute: typeof AdminSlaRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/koridor/$routeId': {
       id: '/koridor/$routeId'
       path: '/koridor/$routeId'
@@ -431,6 +761,13 @@ declare module '@tanstack/react-router' {
       path: '/analitik'
       fullPath: '/partner/analitik'
       preLoaderRoute: typeof PartnerAnalitikRouteImport
+      parentRoute: typeof PartnerRoute
+    }
+    '/partner/anggota': {
+      id: '/partner/anggota'
+      path: '/anggota'
+      fullPath: '/partner/anggota'
+      preLoaderRoute: typeof PartnerAnggotaRouteImport
       parentRoute: typeof PartnerRoute
     }
     '/partner/ekspor': {
@@ -489,6 +826,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WaitEpisodeIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/laporan/$publicId': {
+      id: '/admin/laporan/$publicId'
+      path: '/laporan/$publicId'
+      fullPath: '/admin/laporan/$publicId'
+      preLoaderRoute: typeof AdminLaporanPublicIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/partner/laporan/': {
       id: '/partner/laporan/'
       path: '/laporan'
@@ -506,6 +850,40 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminRouteChildren {
+  AdminAuditRoute: typeof AdminAuditRoute
+  AdminBandingRoute: typeof AdminBandingRoute
+  AdminFlagRoute: typeof AdminFlagRoute
+  AdminKomitmenRoute: typeof AdminKomitmenRoute
+  AdminKonteksRoute: typeof AdminKonteksRoute
+  AdminMasukRoute: typeof AdminMasukRoute
+  AdminModerasiRoute: typeof AdminModerasiRoute
+  AdminRantaiRoute: typeof AdminRantaiRoute
+  AdminRetensiRoute: typeof AdminRetensiRoute
+  AdminRupRoute: typeof AdminRupRoute
+  AdminSlaRoute: typeof AdminSlaRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+  AdminLaporanPublicIdRoute: typeof AdminLaporanPublicIdRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAuditRoute: AdminAuditRoute,
+  AdminBandingRoute: AdminBandingRoute,
+  AdminFlagRoute: AdminFlagRoute,
+  AdminKomitmenRoute: AdminKomitmenRoute,
+  AdminKonteksRoute: AdminKonteksRoute,
+  AdminMasukRoute: AdminMasukRoute,
+  AdminModerasiRoute: AdminModerasiRoute,
+  AdminRantaiRoute: AdminRantaiRoute,
+  AdminRetensiRoute: AdminRetensiRoute,
+  AdminRupRoute: AdminRupRoute,
+  AdminSlaRoute: AdminSlaRoute,
+  AdminIndexRoute: AdminIndexRoute,
+  AdminLaporanPublicIdRoute: AdminLaporanPublicIdRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 interface LaporRouteChildren {
   LaporDraftIdRoute: typeof LaporDraftIdRoute
 }
@@ -518,6 +896,7 @@ const LaporRouteWithChildren = LaporRoute._addFileChildren(LaporRouteChildren)
 
 interface PartnerRouteChildren {
   PartnerAnalitikRoute: typeof PartnerAnalitikRoute
+  PartnerAnggotaRoute: typeof PartnerAnggotaRoute
   PartnerEksporRoute: typeof PartnerEksporRoute
   PartnerPengaturanRoute: typeof PartnerPengaturanRoute
   PartnerIndexRoute: typeof PartnerIndexRoute
@@ -527,6 +906,7 @@ interface PartnerRouteChildren {
 
 const PartnerRouteChildren: PartnerRouteChildren = {
   PartnerAnalitikRoute: PartnerAnalitikRoute,
+  PartnerAnggotaRoute: PartnerAnggotaRoute,
   PartnerEksporRoute: PartnerEksporRoute,
   PartnerPengaturanRoute: PartnerPengaturanRoute,
   PartnerIndexRoute: PartnerIndexRoute,
@@ -539,6 +919,9 @@ const PartnerRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRouteWithChildren,
+  InstansiRoute: InstansiRoute,
+  KomitmenRoute: KomitmenRoute,
   LaporRoute: LaporRouteWithChildren,
   MasukRoute: MasukRoute,
   MetodologiRoute: MetodologiRoute,
@@ -547,6 +930,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivasiRoute: PrivasiRoute,
   ScanRoute: ScanRoute,
   SekitarRoute: SekitarRoute,
+  SinkronRoute: SinkronRoute,
   KoridorRouteIdRoute: KoridorRouteIdRoute,
   LaporanPublicIdRoute: LaporanPublicIdRoute,
   RadarRouteIdRoute: RadarRouteIdRoute,

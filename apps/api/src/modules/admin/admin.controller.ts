@@ -16,7 +16,9 @@ import type { Request } from 'express';
 import {
   AdminAuditQuery,
   AdminChainVerifyInput,
+  AdminReportQueueQuery,
   AdminFlagInput,
+  AdminHolidayInput,
   AdminModerationInput,
   AdminNoticeInput,
   AdminNoticeQuery,
@@ -29,6 +31,7 @@ import { parseOrThrow } from '../../common/http/zod';
 import { PlatformOnly } from '../../common/auth/platform-roles.decorator';
 import { ok } from '../../common/http/envelope';
 import { AdminService } from './admin.service';
+import { RetentionPolicyService } from './retention.policy.service';
 import { PlatformGuard, platformSessionOf } from './platform.guard';
 
 const NO_STORE = 'no-store, private, max-age=0';
@@ -36,7 +39,10 @@ const NO_STORE = 'no-store, private, max-age=0';
 @Controller('admin')
 @UseGuards(PlatformGuard)
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly retention: RetentionPolicyService,
+  ) {}
 
   @Post('notices')
   @HttpCode(HttpStatus.CREATED)
@@ -51,6 +57,21 @@ export class AdminController {
       requestIdOf(request),
     );
     return ok(created, requestIdOf(request));
+  }
+
+  @Post('holidays')
+  @HttpCode(HttpStatus.CREATED)
+  @Header('Cache-Control', NO_STORE)
+  @RateLimit(RATE_LIMIT_POLICIES.adminMutation)
+  @PlatformOnly('moderator')
+  async saveHoliday(@Body() body: unknown, @Req() request: Request) {
+    const input = parseOrThrow(AdminHolidayInput, body);
+    const saved = await this.admin.upsertHoliday(
+      input,
+      platformSessionOf(request),
+      requestIdOf(request),
+    );
+    return ok(saved, requestIdOf(request));
   }
 
   @Get('notices')
@@ -70,6 +91,34 @@ export class AdminController {
   async audit(@Query() query: unknown, @Req() request: Request) {
     const input = parseOrThrow(AdminAuditQuery, query);
     const result = await this.admin.listAudit(input);
+    return ok(result, requestIdOf(request));
+  }
+
+  @Get('reports')
+  @Header('Cache-Control', NO_STORE)
+  @RateLimit(RATE_LIMIT_POLICIES.adminRead)
+  @PlatformOnly('moderator')
+  async moderationQueue(@Query() query: unknown, @Req() request: Request) {
+    const input = parseOrThrow(AdminReportQueueQuery, query);
+    const result = await this.admin.moderationQueue(input);
+    return ok(result, requestIdOf(request));
+  }
+
+  @Get('reports/:publicId')
+  @Header('Cache-Control', NO_STORE)
+  @RateLimit(RATE_LIMIT_POLICIES.adminRead)
+  @PlatformOnly('moderator')
+  async reportDetail(@Param('publicId') publicId: string, @Req() request: Request) {
+    const result = await this.admin.reportDetail(publicId);
+    return ok(result, requestIdOf(request));
+  }
+
+  @Get('cities')
+  @Header('Cache-Control', NO_STORE)
+  @RateLimit(RATE_LIMIT_POLICIES.adminRead)
+  @PlatformOnly('moderator')
+  async cities(@Req() request: Request) {
+    const result = await this.admin.cities();
     return ok(result, requestIdOf(request));
   }
 
@@ -174,5 +223,43 @@ export class AdminController {
     const input = parseOrThrow(AdminRupQuery, query);
     const result = await this.admin.listRup(input);
     return ok(result, requestIdOf(request));
+  }
+
+  @Get('retention')
+  @Header('Cache-Control', NO_STORE)
+  @RateLimit(RATE_LIMIT_POLICIES.adminRead)
+  @PlatformOnly('moderator')
+  async retentionPolicy(@Req() request: Request) {
+    const report = await this.retention.report();
+    return ok(
+      {
+        version: report.plan.now,
+        description: report.description,
+        actionable: report.actionable,
+        protectedCount: report.protectedCount,
+        decisions: report.plan.decisions,
+        warnings: report.plan.warnings,
+      },
+      requestIdOf(request),
+    );
+  }
+
+  @Get('retention/runs')
+  @Header('Cache-Control', NO_STORE)
+  @RateLimit(RATE_LIMIT_POLICIES.adminRead)
+  @PlatformOnly('moderator')
+  async retentionRuns(@Req() request: Request) {
+    const runs = await this.retention.recentRuns(20);
+    return ok({ items: runs }, requestIdOf(request));
+  }
+
+  @Post('retention/run')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', NO_STORE)
+  @RateLimit(RATE_LIMIT_POLICIES.adminMutation)
+  @PlatformOnly('superadmin')
+  async runRetention(@Req() request: Request) {
+    const outcome = await this.retention.run();
+    return ok(outcome, requestIdOf(request));
   }
 }

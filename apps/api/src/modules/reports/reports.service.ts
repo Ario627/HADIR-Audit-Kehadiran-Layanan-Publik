@@ -9,6 +9,7 @@ import type {
   ReportStatus,
   VerifyClosureInput,
 } from '@hadir/contracts';
+import { slaFreeze } from '@hadir/domain';
 import { AuditService } from '../../common/audit/audit.service';
 import { AppError } from '../../common/errors/app-error';
 import { parseBbox } from '../../common/geo/bbox';
@@ -21,6 +22,7 @@ import {
 import { nextPublicId } from '../../common/id/public-id';
 import type { Transaction } from '../../db/client';
 import { TRANSACTION_RUNNER, type TransactionRunner } from '../../db/transaction-runner';
+import { AccountabilityRepository } from '../../db/repositories/accountability.repository';
 import { DevicesRepository } from '../../db/repositories/devices.repository';
 import {
   ReportsRepository,
@@ -61,6 +63,7 @@ export class ReportsService {
     private readonly audit: AuditService,
     @Inject(TRANSACTION_RUNNER) private readonly run: TransactionRunner,
     private readonly uploads: UploadsService,
+    private readonly accountability: AccountabilityRepository,
   ) {}
 
   private async assertDeviceRecord(tx: Transaction, deviceHash: string): Promise<void> {
@@ -159,6 +162,18 @@ export class ReportsService {
         if (input.photoUploadId !== undefined && input.photoUploadId !== null) {
           await this.uploads.claimForReport(tx, input.photoUploadId, report.id, device.hash);
         }
+        const freeze = slaFreeze(input.category, 'none', report.createdAt.toISOString());
+        await this.accountability.freezeSla(tx, {
+          reportId: report.id,
+          policyVersion: freeze.policyVersion,
+          priority: freeze.priority,
+          acknowledgeHours: freeze.targets.acknowledgeHours,
+          respondHours: freeze.targets.respondHours,
+          resolveHours: freeze.targets.resolveHours,
+          acknowledgeDue: new Date(freeze.deadlines.acknowledge),
+          respondDue: new Date(freeze.deadlines.respond),
+          resolveDue: new Date(freeze.deadlines.resolve),
+        });
         await this.recordEvent(
           tx,
           report.id,
@@ -222,6 +237,7 @@ export class ReportsService {
           category: query.category ?? null,
           status: query.status ?? null,
           bbox,
+          stopId: query.stopId ?? null,
           cursor: parseCursor(query.cursor),
           limit: query.limit,
         }),

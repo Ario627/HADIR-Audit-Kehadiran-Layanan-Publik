@@ -68,6 +68,7 @@ export interface WaitEstimate {
   clusters: number;
   days: number;
   devices: number;
+  deviceDays: number;
   simulated: boolean;
   medianMin: number | null;
   meanMin: number | null;
@@ -650,6 +651,7 @@ function estimateCore(
     clusters: clustersCount,
     days,
     devices: population.devices,
+    deviceDays: population.devices,
     simulated: population.simulated,
     medianMin: toMinutesOrNull(experienced?.medianS ?? null),
     meanMin: toMinutesOrNull(mean),

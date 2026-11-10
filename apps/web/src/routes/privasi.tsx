@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import { StatePanel } from '../components/StatePanel';
+import { ConsentWithdraw } from '../features/report/ConsentWithdraw';
 import { describeError } from '../lib/errors';
 import { prefetchAll } from '../lib/prefetch';
 import {
@@ -56,7 +57,7 @@ function MyReports() {
   return (
     <ul className="picker-results">
       {query.data.map((item) => (
-        <li key={item.publicId}>
+        <li key={item.publicId} className="picker-entry">
           <Link to="/laporan/$publicId" params={{ publicId: item.publicId }} className="picker-item">
             <span className="board-code">{item.publicId}</span>
             <span className="picker-name">{item.stopName}</span>
@@ -64,6 +65,7 @@ function MyReports() {
               {categoryLabel(item.category)} · {statusLabel(item.status)} · {formatDate(item.createdAt)}
             </span>
           </Link>
+          <ConsentWithdraw publicId={item.publicId} />
         </li>
       ))}
     </ul>

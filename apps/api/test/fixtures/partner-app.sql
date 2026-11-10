@@ -212,6 +212,8 @@ ALTER TABLE reports
   ADD COLUMN contact_email_enc bytea,
   ADD COLUMN contact_email_hash bytea;
 
+CREATE TYPE media_status AS ENUM ('pending', 'quarantined', 'approved', 'rejected', 'deleted');
+
 CREATE TABLE report_media (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   report_id uuid NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
@@ -220,7 +222,7 @@ CREATE TABLE report_media (
   width integer,
   height integer,
   sha256 bytea,
-  status text NOT NULL DEFAULT 'pending',
+  status media_status NOT NULL DEFAULT 'pending',
   created_at timestamp with time zone NOT NULL DEFAULT now()
 );
 

@@ -20,6 +20,9 @@ import { RunwayModule } from './modules/runway/runway.module';
 import { PartnerModule } from './modules/partner/partner.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { EvidenceModule } from './modules/evidence/evidence.module';
+import { AccountabilityModule } from './modules/accountability/accountability.module';
+import { GovernanceModule } from './modules/governance/governance.module';
 import { TransparencyModule } from './modules/transparency/transparency.module';
 import { InternalModule } from './modules/internal/internal.module';
 import { NewsModule } from './modules/news/news.module';
@@ -40,6 +43,9 @@ import { NewsModule } from './modules/news/news.module';
     PartnerModule,
     UploadsModule,
     AdminModule,
+    EvidenceModule,
+    AccountabilityModule,
+    GovernanceModule,
     TransparencyModule,
     InternalModule,
     NewsModule,

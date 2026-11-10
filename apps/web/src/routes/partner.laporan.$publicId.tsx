@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, createFileRoute } from '@tanstack/react-router';
 import { StatePanel } from '../components/StatePanel';
+import { AccountabilityPanel } from '../features/partner/AccountabilityPanel';
 import { ActionPanel } from '../features/partner/ActionPanel';
 import { PartnerReportBody } from '../features/partner/PartnerReportBody';
 import { usePartnerProfile } from '../features/partner/use-partner';
@@ -119,6 +120,9 @@ function PartnerReportPage() {
 
       <PartnerReportBody report={report.data} now={now} />
       <ActionPanel publicId={publicId} canAct={canAct} now={now} />
+      {profile.data === undefined ? null : (
+        <AccountabilityPanel publicId={publicId} role={profile.data.role} />
+      )}
     </>
   );
 }

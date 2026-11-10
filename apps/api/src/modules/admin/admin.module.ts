@@ -4,12 +4,14 @@ import { AdminRepository } from '../../db/repositories/admin.repository';
 import { ChainRepository } from '../../db/repositories/chain.repository';
 import { PlatformAdminRepository } from '../../db/repositories/platform-admin.repository';
 import { ReportsRepository } from '../../db/repositories/reports.repository';
+import { RetentionRepository } from '../../db/repositories/retention.repository';
 import { TransparencyModule } from '../transparency/transparency.module';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { PlatformAuthService } from './platform-auth.service';
 import { PlatformGuard } from './platform.guard';
+import { RetentionPolicyService } from './retention.policy.service';
 
 @Module({
   imports: [AuditModule, TransparencyModule],
@@ -18,10 +20,12 @@ import { PlatformGuard } from './platform.guard';
     AdminService,
     PlatformAuthService,
     PlatformGuard,
+    RetentionPolicyService,
     PlatformAdminRepository,
     AdminRepository,
     ChainRepository,
     ReportsRepository,
+    RetentionRepository,
   ],
   exports: [PlatformAuthService],
 })

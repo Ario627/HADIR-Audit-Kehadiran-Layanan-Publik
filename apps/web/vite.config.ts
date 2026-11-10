@@ -78,6 +78,10 @@ export default defineConfig(({ mode }) => {
       },
     },
     preview: { port: 4173 },
+    test: {
+      environment: 'jsdom',
+      include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    },
     build: {
       target: 'baseline-widely-available',
       sourcemap: true,

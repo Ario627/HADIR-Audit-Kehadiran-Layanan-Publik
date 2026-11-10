@@ -533,10 +533,19 @@ function toEstimate(value: unknown): Estimate | null {
 
   const days = readCount(value.sample.days, 3_650);
   const devices = readCount(value.sample.devices, 1_000_000);
+  const deviceDaysRaw = value.sample.deviceDays;
+  const deviceDays =
+    deviceDaysRaw === undefined ? devices : readCount(deviceDaysRaw, 1_000_000);
   const clusters = readCount(value.sample.clusters, 1_000_000);
   const designEffect = readNumber(value.sample.designEffect);
   const thresholdMin = readOptionalNumber(value.sample.thresholdMin);
-  if (days === null || devices === null || clusters === null || designEffect === null) {
+  if (
+    days === null ||
+    devices === null ||
+    deviceDays === null ||
+    clusters === null ||
+    designEffect === null
+  ) {
     return null;
   }
   if (thresholdMin === undefined) {
@@ -569,7 +578,15 @@ function toEstimate(value: unknown): Estimate | null {
     message,
     warnings,
     simulated: value.simulated,
-    sample: { days, devices, clusters, designEffect, thresholdMin },
+    sample: {
+      days,
+      devices,
+      deviceDays,
+      populationLabel: 'device_day_pseudonyms',
+      clusters,
+      designEffect,
+      thresholdMin,
+    },
     computedAt,
     methodVersion,
   };
@@ -1243,6 +1260,23 @@ export const storedUploadSchema: PayloadSchema<StoredUpload> = {
 
 const ANCHOR_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+function toAnchorSignature(value: unknown): TransparencyAnchor['signature'] {
+  if (value === null) {
+    return null;
+  }
+  if (!isRecord(value) || value.algorithm !== 'ed25519') {
+    return null;
+  }
+  const keyId = readText(value.keyId, 64);
+  const signature = readText(value.signature, 128);
+  const publicKey = readText(value.publicKey, 64);
+  const signedAt = readIsoDateTime(value.signedAt);
+  if (keyId === null || signature === null || publicKey === null || signedAt === null) {
+    return null;
+  }
+  return { algorithm: 'ed25519', keyId, signature, publicKey, signedAt };
+}
+
 function toTransparencyAnchor(value: unknown): TransparencyAnchor | null {
   if (!isRecord(value)) {
     return null;
@@ -1253,6 +1287,10 @@ function toTransparencyAnchor(value: unknown): TransparencyAnchor | null {
   const verifyUrl = readText(value.verifyUrl, 500);
   const publishedAt = readIsoDateTime(value.publishedAt);
   const txRef = readNullableText(value.txRef, 200);
+  const windowStart = readIsoDateTime(value.windowStart);
+  const windowEnd = readIsoDateTime(value.windowEnd);
+  const payloadDigest = readText(value.payloadDigest, 128);
+  const caveat = readText(value.caveat, 500);
   if (
     date === null ||
     merkleRoot === null ||
@@ -1266,7 +1304,20 @@ function toTransparencyAnchor(value: unknown): TransparencyAnchor | null {
   if (!ANCHOR_DATE.test(date)) {
     return null;
   }
-  return { date, merkleRoot, eventCount, txRef, verifyUrl, publishedAt };
+  const signature = toAnchorSignature(value.signature);
+  return {
+    date,
+    merkleRoot,
+    eventCount,
+    txRef,
+    verifyUrl,
+    publishedAt,
+    windowStart: windowStart ?? publishedAt,
+    windowEnd: windowEnd ?? publishedAt,
+    signature,
+    payloadDigest: payloadDigest ?? '',
+    caveat: caveat ?? '',
+  };
 }
 
 export const transparencyAnchorSchema: PayloadSchema<TransparencyAnchor> = {

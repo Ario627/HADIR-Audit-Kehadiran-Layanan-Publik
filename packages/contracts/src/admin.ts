@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { Cursor, IsoDateTime, Uuid } from './common';
+import { EvidenceLevel, ReportCategory, ReportStatus } from './common';
+import { AnchorDate } from './transparency';
 
 export const PlatformAdminRole = z.enum(['moderator', 'superadmin']);
 
@@ -47,6 +49,36 @@ export const AdminNoticeInput = z
   );
 
 export type AdminNoticeInput = z.infer<typeof AdminNoticeInput>;
+
+export const AdminHolidayInput = z
+  .object({
+    date: AnchorDate,
+    name: z.string().trim().min(1).max(120),
+    cityId: Uuid.nullable().optional(),
+    sourceUrl: z.url().max(500),
+  })
+  .strict();
+
+export type AdminHolidayInput = z.infer<typeof AdminHolidayInput>;
+
+export const SnapshotRefreshInput = z
+  .object({
+    stopId: Uuid.optional(),
+    window: z.enum(['7d', '30d']).default('7d'),
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+  })
+  .strict();
+
+export type SnapshotRefreshInput = z.infer<typeof SnapshotRefreshInput>;
+
+export const SnapshotRefreshResult = z.object({
+  scope: z.enum(['stop', 'active_stops']),
+  stops: z.number().int().nonnegative(),
+  inserted: z.number().int().nonnegative(),
+  rows: z.number().int().nonnegative(),
+});
+
+export type SnapshotRefreshResult = z.infer<typeof SnapshotRefreshResult>;
 
 export const Notice = z.object({
   id: Uuid,
@@ -104,6 +136,66 @@ export const AdminModerationResult = z.object({
 });
 
 export type AdminModerationResult = z.infer<typeof AdminModerationResult>;
+
+export const AdminReportQueueQuery = z
+  .object({
+    moderation: z
+      .enum(['pending', 'approved', 'rejected', 'quarantined'])
+      .default('pending'),
+    category: ReportCategory.optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    cursor: Cursor.optional(),
+  })
+  .strict();
+
+export type AdminReportQueueQuery = z.infer<typeof AdminReportQueueQuery>;
+
+export const AdminReportRow = z.object({
+  publicId: z.string().min(6).max(40),
+  category: ReportCategory,
+  status: ReportStatus,
+  moderation: z.enum(['pending', 'approved', 'rejected', 'quarantined']),
+  stopCode: z.string().min(1).max(12),
+  stopName: z.string().min(1).max(160),
+  institutionName: z.string().max(160).nullable(),
+  text: z.string().min(1).max(2000),
+  evidenceLevel: EvidenceLevel,
+  corroborationCount: z.number().int().nonnegative(),
+  createdAt: IsoDateTime,
+});
+
+export type AdminReportRow = z.infer<typeof AdminReportRow>;
+
+export const AdminReportDetail = AdminReportRow.extend({
+  followUpAt: IsoDateTime.nullable(),
+  resolvedAt: IsoDateTime.nullable(),
+  evidenceScore: z.number().min(0).max(1),
+});
+
+export type AdminReportDetail = z.infer<typeof AdminReportDetail>;
+
+export const AdminReportQueue = z.object({
+  items: z.array(AdminReportRow).max(100),
+  count: z.number().int().nonnegative(),
+});
+
+export type AdminReportQueue = z.infer<typeof AdminReportQueue>;
+
+export const CityView = z.object({
+  id: Uuid,
+  code: z.string().min(2).max(8),
+  name: z.string().min(1).max(120),
+  timezone: z.string().min(1).max(60),
+});
+
+export type CityView = z.infer<typeof CityView>;
+
+export const CityList = z.object({
+  items: z.array(CityView).max(200),
+  count: z.number().int().nonnegative(),
+});
+
+export type CityList = z.infer<typeof CityList>;
 
 export const AdminAuditQuery = z
   .object({

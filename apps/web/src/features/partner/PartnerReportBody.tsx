@@ -1,7 +1,7 @@
 import type { PartnerReportDetail } from '@hadir/contracts';
 import { apiAssetUrl } from '../../lib/api';
 import { evidenceOf } from '../../lib/evidence';
-import { followUpText } from '../../lib/partner';
+import { agePressureText, followUpText, reportAgeText } from '../../lib/partner';
 import { categoryLabel, eventLabel, moderationLabel, statusLabel } from '../../lib/report';
 import { formatDateTime, formatNumber } from '../../lib/time';
 
@@ -46,6 +46,9 @@ function MediaStrip({ report }: { report: PartnerReportDetail }) {
 
 export function PartnerReportBody({ report, now }: PartnerReportBodyProps) {
   const followUp = followUpText(report.followUpAt, now);
+  const age = reportAgeText(report.createdAt, now);
+  const pressure = agePressureText(report.createdAt, now);
+  const evidence = evidenceOf(report.evidenceLevel);
   return (
     <div className="partner-report">
       <div className="page-head">
@@ -65,7 +68,10 @@ export function PartnerReportBody({ report, now }: PartnerReportBodyProps) {
         </div>
         <div>
           <dt>Level bukti</dt>
-          <dd>{evidenceOf(report.evidenceLevel).label}</dd>
+          <dd>
+            {evidence.label}
+            <span className="fact-hint">{evidence.detail}</span>
+          </dd>
         </div>
         <div>
           <dt>Moderasi</dt>
@@ -82,6 +88,13 @@ export function PartnerReportBody({ report, now }: PartnerReportBodyProps) {
         <div>
           <dt>Tindak lanjut</dt>
           <dd>{followUp ?? 'Belum dijadwalkan'}</dd>
+        </div>
+        <div>
+          <dt>Umur laporan</dt>
+          <dd>
+            {age ?? '—'}
+            {pressure === null ? null : <span className="fact-hint fact-hint--alert">{pressure}</span>}
+          </dd>
         </div>
         {report.authorityName === null ? null : (
           <div>

@@ -60,6 +60,8 @@ export const Estimate = z.object({
   sample: z.object({
     days: z.number().int().nonnegative(),
     devices: z.number().int().nonnegative(),
+    deviceDays: z.number().int().nonnegative(),
+    populationLabel: z.literal('device_day_pseudonyms'),
     clusters: z.number().int().nonnegative(),
     designEffect: z.number().nonnegative(),
     thresholdMin: z.number().nonnegative().nullable(),

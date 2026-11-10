@@ -39,6 +39,9 @@ export function PartnerBar({ profile }: PartnerBarProps) {
         >
           Laporan
         </Link>
+        <Link to="/partner/anggota" activeProps={{ className: 'is-active' }}>
+          Anggota
+        </Link>
         <Link to="/partner/pengaturan" activeProps={{ className: 'is-active' }}>
           Pengaturan
         </Link>

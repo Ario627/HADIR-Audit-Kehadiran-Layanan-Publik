@@ -3,6 +3,13 @@ import { sql, type SQL } from 'drizzle-orm';
 import type { Database, Transaction } from '../client';
 import { DATABASE } from '../db.module';
 
+export interface CityRow {
+  id: string;
+  code: string;
+  name: string;
+  timezone: string;
+}
+
 export interface NoticeRow {
   id: string;
   kind: string;
@@ -229,6 +236,30 @@ export class AdminRepository {
     return toNotice(row);
   }
 
+  async upsertHoliday(
+    tx: Transaction,
+    values: { date: string; name: string; cityId: string | null; sourceUrl: string },
+  ): Promise<{ date: string; name: string; cityId: string | null; sourceUrl: string }> {
+    const result = await tx.execute(sql`
+      INSERT INTO holiday_calendar (city_id, holiday_date, name, source_url)
+      VALUES (${values.cityId}, ${values.date}::date, ${values.name}, ${values.sourceUrl})
+      ON CONFLICT (city_id, holiday_date) DO UPDATE
+        SET name = EXCLUDED.name, source_url = EXCLUDED.source_url
+      RETURNING to_char(holiday_date, 'YYYY-MM-DD') AS holiday_date, name,
+                city_id, source_url
+    `);
+    const row = result.rows[0] as Record<string, unknown> | undefined;
+    if (row === undefined) {
+      throw new Error('Hari libur gagal disimpan.');
+    }
+    return {
+      date: String(row.holiday_date),
+      name: String(row.name),
+      cityId: row.city_id === null ? null : String(row.city_id),
+      sourceUrl: String(row.source_url),
+    };
+  }
+
   async listNotices(
     executor: Database | Transaction,
     filters: NoticeFilters,
@@ -402,6 +433,24 @@ export class AdminRepository {
     `);
     const row = result.rows[0] as Record<string, unknown> | undefined;
     return { inserted: row?.inserted === true };
+  }
+
+  async listCities(executor: Database | Transaction): Promise<CityRow[]> {
+    const result = await executor.execute(sql`
+      SELECT id, code, name, timezone
+      FROM cities
+      ORDER BY name ASC
+      LIMIT 200
+    `);
+    return result.rows.map((row) => {
+      const record = row as Record<string, unknown>;
+      return {
+        id: String(record.id),
+        code: String(record.code),
+        name: String(record.name),
+        timezone: String(record.timezone),
+      };
+    });
   }
 
   async listRup(

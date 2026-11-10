@@ -4,6 +4,9 @@ import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { StatePanel } from '../components/StatePanel';
 import { EstimateBlock } from '../features/estimate/EstimateBlock';
+import { EvidenceDossierSection } from '../features/stop/EvidenceDossier';
+import { StopAuthorities } from '../features/stop/StopAuthorities';
+import { StopReports } from '../features/stop/StopReports';
 import { StopLead } from '../features/stop/StopLead';
 import { canStartAt } from '../lib/stop-status';
 import { useStartEpisode } from '../features/wait/use-episode-actions';
@@ -256,6 +259,12 @@ function QrLandingPage() {
         routeId={routeId}
         routeCount={routes.length}
       />
+
+      <EvidenceDossierSection stopId={stop.id} window={period} routeId={routeId ?? undefined} />
+
+      <StopReports stopId={stop.id} stopCode={stop.code} stopName={stop.name} />
+
+      <StopAuthorities stopCode={stop.code} />
 
       {qrErrorMessage === null ? (
         <p className="note">

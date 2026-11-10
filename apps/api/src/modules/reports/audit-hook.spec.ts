@@ -108,6 +108,7 @@ function buildCitizen(
       audit.service,
       passthroughRunner,
       { claimForReport: async () => undefined } as never,
+      { freezeSla: async () => true } as never,
     ),
     audit,
   };

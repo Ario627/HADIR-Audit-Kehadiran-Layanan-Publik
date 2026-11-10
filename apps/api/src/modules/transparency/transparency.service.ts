@@ -1,7 +1,24 @@
-import { Inject, Injectable } from '@nestjs/common';
-import type { AdminChainVerifyResult, TransparencyAnchor } from '@hadir/contracts';
+import { createHash } from 'node:crypto';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type {
+  AdminChainVerifyResult,
+  AnchorInclusionProof,
+  AnchorPublicKey,
+  AnchorTimeline,
+  AnchorTimelineQuery,
+  TransparencyAnchor,
+} from '@hadir/contracts';
+import {
+  ANCHOR_ALGORITHM,
+  anchorTrustCaveat,
+  canonicalAnchorPayload,
+  daySequence,
+  timelineGaps,
+  type AnchorEnvelope,
+} from '@hadir/domain';
 import { AuditService } from '../../common/audit/audit.service';
 import { env } from '../../common/config/env';
+import { anchorSignedParts, requireAnchorSigner } from '../../common/crypto/anchor-signer';
 import { AppError } from '../../common/errors/app-error';
 import type { PlatformAdminSession } from '../../common/auth/platform-session';
 import type { Transaction } from '../../db/client';
@@ -11,7 +28,12 @@ import {
   inspectChain,
   type AnchorRow,
 } from '../../db/repositories/chain.repository';
-import { MERKLE_ALGORITHM, merkleSummary } from './merkle';
+import {
+  MERKLE_ALGORITHM,
+  merkleProof,
+  merkleSummary,
+  verifyMerkleProof,
+} from './merkle';
 
 const DAY_MS = 86_400_000;
 const MAX_BREAKS = 500;
@@ -34,7 +56,42 @@ export function verifyUrlFor(date: string): string {
   return `${base}/transparansi/${date}`;
 }
 
+export function envelopeOf(row: AnchorRow): AnchorEnvelope {
+  return {
+    anchorDate: row.anchorDate,
+    merkleRootBase64: row.merkleRoot.toString('base64'),
+    leafCount: row.leafCount,
+    windowStart: row.windowStart.toISOString(),
+    windowEnd: row.windowEnd.toISOString(),
+    signingKeyId: row.signingKeyId,
+    signatureAlgorithm: row.signatureAlgorithm,
+    signatureBase64: row.signature === null ? null : row.signature.toString('base64'),
+    publicKeyBase64: row.publicKey === null ? null : row.publicKey.toString('base64'),
+    signedAt: row.signedAt === null ? null : row.signedAt.toISOString(),
+  };
+}
+
+export function payloadDigestOf(row: AnchorRow): string {
+  return createHash('sha256')
+    .update(canonicalAnchorPayload(envelopeOf(row)), 'utf8')
+    .digest('base64');
+}
+
 export function toTransparencyAnchor(row: AnchorRow): TransparencyAnchor {
+  const signature =
+    row.signature !== null &&
+    row.signingKeyId !== null &&
+    row.publicKey !== null &&
+    row.signedAt !== null &&
+    row.signatureAlgorithm === ANCHOR_ALGORITHM
+      ? {
+          algorithm: 'ed25519' as const,
+          keyId: row.signingKeyId,
+          signature: row.signature.toString('base64'),
+          publicKey: row.publicKey.toString('base64'),
+          signedAt: row.signedAt.toISOString(),
+        }
+      : null;
   return {
     date: row.anchorDate,
     merkleRoot: row.merkleRoot.toString('base64'),
@@ -42,11 +99,18 @@ export function toTransparencyAnchor(row: AnchorRow): TransparencyAnchor {
     txRef: row.txRef,
     verifyUrl: verifyUrlFor(row.anchorDate),
     publishedAt: row.createdAt.toISOString(),
+    windowStart: row.windowStart.toISOString(),
+    windowEnd: row.windowEnd.toISOString(),
+    signature,
+    payloadDigest: payloadDigestOf(row),
+    caveat: anchorTrustCaveat(),
   };
 }
 
 @Injectable()
 export class TransparencyService {
+  private readonly logger = new Logger(TransparencyService.name);
+
   constructor(
     private readonly chain: ChainRepository,
     private readonly audit: AuditService,
@@ -120,6 +184,9 @@ export class TransparencyService {
         detail: 'Tidak ada event untuk di-anchor pada tanggal tersebut.',
       });
     }
+
+    const signed = await this.signRow(sealed.row, session, requestId, now);
+
     if (sealed.created) {
       await this.audit.record({
         action: 'admin.anchor_sealed',
@@ -127,10 +194,183 @@ export class TransparencyService {
         objectId: date,
         actor: { kind: session.role, userId: session.adminId },
         requestId,
-        payload: { leafCount: sealed.row.leafCount },
+        payload: {
+          leafCount: signed.leafCount,
+          signed: signed.signature !== null,
+          keyId: signed.signingKeyId,
+        },
       });
     }
-    return toTransparencyAnchor(sealed.row);
+    return toTransparencyAnchor(signed);
+  }
+
+  private async signRow(
+    row: AnchorRow,
+    session: PlatformAdminSession,
+    requestId: string,
+    now: Date,
+  ): Promise<AnchorRow> {
+    if (row.signature !== null) {
+      return row;
+    }
+    if (env.anchorSigningKey === null || env.anchorSigningKeyId === null) {
+      this.logger.warn(
+        `Anchor ${row.anchorDate} disimpan tanpa tanda tangan: ANCHOR_SIGNING_KEY belum dikonfigurasi.`,
+      );
+      return row;
+    }
+    const signer = requireAnchorSigner(env.anchorSigningKey, env.anchorSigningKeyId);
+    const parts = anchorSignedParts(signer, envelopeOf(row), now);
+    const updated = await this.run(
+      (tx) =>
+        this.chain.attachSignature(tx, row.anchorDate, {
+          signature: Buffer.from(parts.signatureBase64, 'base64'),
+          signatureAlgorithm: parts.signatureAlgorithm,
+          signingKeyId: parts.signingKeyId,
+          publicKey: Buffer.from(parts.publicKeyBase64, 'base64'),
+          signedAt: parts.signedAt,
+        }),
+      { scope: 'admin', requestId, userId: session.adminId },
+    );
+    if (updated === null) {
+      const current = await this.run((tx) => this.chain.findAnchor(tx, row.anchorDate), {
+        scope: 'admin',
+        requestId,
+        userId: session.adminId,
+      });
+      return current ?? row;
+    }
+    return updated;
+  }
+
+  async publicKeys(): Promise<{ items: AnchorPublicKey[] }> {
+    const rows = await this.run((tx) => this.chain.listPublicKeyUsage(tx), {
+      scope: 'public',
+      requestId: 'anchor-keys',
+    });
+    return {
+      items: rows.map((row) => ({
+        algorithm: ANCHOR_ALGORITHM,
+        keyId: row.keyId,
+        publicKey: row.publicKey.toString('base64'),
+        firstAnchoredAt: `${row.firstDate}T00:00:00.000Z`,
+        lastAnchoredAt: `${row.lastDate}T00:00:00.000Z`,
+        anchorCount: row.count,
+      })),
+    };
+  }
+
+  async timeline(query: AnchorTimelineQuery, now: Date = new Date()): Promise<AnchorTimeline> {
+    const to = query.to ?? now.toISOString().slice(0, 10);
+    const from =
+      query.from ??
+      new Date(new Date(`${to}T00:00:00.000Z`).getTime() - (query.days - 1) * DAY_MS)
+        .toISOString()
+        .slice(0, 10);
+    const dates = daySequence(from, to);
+    if (dates.length === 0) {
+      throw new AppError('VALIDATION_FAILED', {
+        detail: 'Rentang tanggal tidak valid.',
+        errors: [
+          { field: 'from', code: 'invalid_range', message: 'from harus sebelum to.' },
+        ],
+      });
+    }
+    const rows = await this.run((tx) => this.chain.listAnchorsBetween(tx, from, to), {
+      scope: 'public',
+      requestId: 'anchor-timeline',
+    });
+    const byDate = new Map(rows.map((row) => [row.anchorDate, row]));
+    const entries = dates.map((date) => {
+      const row = byDate.get(date);
+      if (row === undefined) {
+        return {
+          date,
+          status: 'missing' as const,
+          eventCount: null,
+          signed: false,
+        };
+      }
+      const signed =
+        row.signature !== null && row.signingKeyId !== null && row.signatureAlgorithm === ANCHOR_ALGORITHM;
+      return {
+        date,
+        status: signed ? ('verified' as const) : ('unsigned' as const),
+        eventCount: row.leafCount,
+        signed,
+      };
+    });
+    const gaps = [...timelineGaps(entries)];
+    return { from, to, entries, gaps, complete: gaps.length === 0 };
+  }
+
+  async inclusionProof(
+    publicId: string,
+    seq: number | null,
+  ): Promise<AnchorInclusionProof> {
+    const events = await this.run(
+      async (tx) => {
+        const reportId = await this.chain.findReportIdByPublicId(tx, publicId);
+        if (reportId === null) {
+          return null;
+        }
+        const all = await this.chain.listEventsForReport(tx, reportId);
+        return all.length === 0 ? null : all;
+      },
+      { scope: 'public', requestId: `anchor-proof-${publicId}` },
+    );
+    if (events === null) {
+      throw new AppError('NOT_FOUND', { detail: 'Laporan tidak ditemukan.' });
+    }
+
+    const target =
+      seq === null ? events[events.length - 1]! : events.find((event) => event.seq === seq);
+    if (target === undefined) {
+      throw new AppError('NOT_FOUND', { detail: 'Event tidak ditemukan pada laporan ini.' });
+    }
+
+    const date = target.createdAt.toISOString().slice(0, 10);
+    const { start, end } = dayWindow(date);
+    const anchor = await this.run((tx) => this.chain.findAnchor(tx, date), {
+      scope: 'public',
+      requestId: `anchor-proof-${date}`,
+    });
+    if (anchor === null) {
+      throw new AppError('NOT_FOUND', {
+        detail: 'Anchor untuk tanggal event tersebut belum diterbitkan.',
+      });
+    }
+
+    const leaves = await this.run((tx) => this.chain.listChainLeavesInWindow(tx, start, end), {
+      scope: 'public',
+      requestId: `anchor-proof-${date}`,
+    });
+    const index = leaves.findIndex(
+      (leaf) => leaf.reportId === target.reportId && leaf.seq === target.seq,
+    );
+    if (index < 0) {
+      throw new AppError('NOT_FOUND', { detail: 'Event tidak termasuk dalam anchor hari itu.' });
+    }
+
+    const hashes = leaves.map((leaf) => leaf.chainHash);
+    const proof = merkleProof(hashes, index);
+    const verified = hashes.length === anchor.leafCount && verifyMerkleProof(
+      hashes[index]!,
+      proof,
+      index,
+      anchor.merkleRoot,
+    );
+
+    return {
+      date,
+      reportPublicId: publicId,
+      seq: target.seq,
+      leaf: hashes[index]!.toString('base64'),
+      index,
+      proof: proof.map((node) => node.toString('base64')),
+      root: anchor.merkleRoot.toString('base64'),
+      verified,
+    };
   }
 
   async verify(
